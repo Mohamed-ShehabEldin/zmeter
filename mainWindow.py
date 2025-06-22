@@ -1,3 +1,4 @@
+# to fully work please download nidaqmx
 import random
 import sympy as sp
 import os
@@ -5,9 +6,9 @@ from PyQt6.QtGui import QCloseEvent
 from PyQt6 import QtWidgets, uic, QtCore
 
 
-# from sr830 import SR830
+from sr830.sr830_main import SR830
 from nidaq.nidaq_main import NIDAQ
-# from keithley24xx import Keithley24xx
+from keithley24xx.keithley24xx_main import Keithley24xx
 from k10cr1.k10cr1_main import K10CR1
 
 from core.scan_info import *
@@ -33,17 +34,17 @@ class MainWindow(QtWidgets.QWidget):
 
         # Equip name has to include a serial number
         self.equips = {
-            # "lockin_0": SR830(),
+            "lockin_0": SR830(),
             # "lockin_1": SR830(),
             "nidaq_0": NIDAQ(),
             "HWP_0": K10CR1(),
-            # "Keithley_0": Keithley24xx(),
+            "Keithley_0": Keithley24xx(),
             # "Keithley_1": Keithley24xx()
         }
         
-        self.equips["nidaq_0"].connect("Dev1")
+        #self.equips["nidaq_0"].connect("Dev1")
         # self.equips["HWP_0"].connect(serial = "55369504")
-        self.equips["HWP_0"].connect(serial = "55243324")
+        #self.equips["HWP_0"].connect(serial = "55243324")
         # self.equips["lockin_0"].connect_visa("GPIB0::7::INSTR")
         # self.equips["lockin_1"].connect_visa("GPIB0::8::INSTR")
         # self.equips["Keithley_0"].connect_visa("GPIB1::17::INSTR")

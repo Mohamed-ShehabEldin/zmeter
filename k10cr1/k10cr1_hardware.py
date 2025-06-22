@@ -25,12 +25,17 @@ from .thorlabs_utilities import (
     bind
 )
 
-source_dir = r"C:\Users\QMLab\Desktop\Xuguo_local\zmeter_local\v2025.04\zmeter_venv"
-
-if os.path.isfile(source_dir+ r"Kinesis\Thorlabs.MotionControl.IntegratedStepperMotors.dll"):
-    lib = cdll.LoadLibrary(r"Kinesis\Thorlabs.MotionControl.IntegratedStepperMotors.dll")
-elif os.path.isfile(source_dir + r"\Kinesis\Thorlabs.MotionControl.IntegratedStepperMotors.dll"):
-    lib = cdll.LoadLibrary(source_dir + r"\Kinesis\Thorlabs.MotionControl.IntegratedStepperMotors.dll")
+here = os.path.dirname(__file__) # Get the directory of this file
+dll_name = "Thorlabs.MotionControl.IntegratedStepperMotors.dll"
+dll_path = os.path.join(here+r"\Kinesis", dll_name) # Path to the DLL file
+#loading it:
+if not os.path.isfile(dll_path):
+    raise FileNotFoundError(
+        f"Couldn’t find {dll_name} in {here!r}. "
+        "Make sure the DLL is committed alongside the code."
+    )
+lib = cdll.LoadLibrary(dll_path)
+print(f"Loaded Thorlabs DLL from {dll_path!r}")
 
 
 # enum FT_Status
