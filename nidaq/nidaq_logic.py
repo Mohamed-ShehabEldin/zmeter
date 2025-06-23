@@ -3,7 +3,7 @@ from PyQt6 import QtCore, QtWidgets, uic
 import time
 from .nidaq_hardware import NIDAQHardWare
 import sys
-
+#l
 
 class NIDAQLogic(QtCore.QThread):
     sig_new_write = QtCore.pyqtSignal(object)
