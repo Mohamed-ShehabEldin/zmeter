@@ -1,5 +1,5 @@
 from .scan_info import *
-from .scan_logic import ScanLogic
+from .scan_logic_new import ScanLogic
 from .all_level import AllLevelSetting
 from .all_plot_settings import AllPlotSetting
 from .all_plots import AllPlots
@@ -7,6 +7,8 @@ from .construct_scan_coordinates import Construct
 from .all_plots import LinePlot
 from .all_plots import ImagePlot
 import os, shutil
+from .append_to_ppt import add_slide_with_qpixmap
+
 
 
 class Scan(QtWidgets.QWidget):
@@ -19,6 +21,7 @@ class Scan(QtWidgets.QWidget):
         self.ui = uic.loadUi("core/ui/scan new.ui", self)
 
         self.logic = ScanLogic(main_window=main_window)
+        # self.logic.sig_capture_ui.connect(self.capture_ui)###### April 2025
         self.logic.sig_new_data.connect(self.new_data)
         self.logic.sig_update_remaining_time.connect(self.update_remaining_time_label)
         self.logic.sig_update_remaining_points.connect(self.update_remaining_points_label)
@@ -76,7 +79,40 @@ class Scan(QtWidgets.QWidget):
         self.all_level_setting.sig_info_changed.emit(self.all_level_setting.all_level_info)
         self.logic.sig_scan_finished.connect(self.scan_finished)
 
-    
+    def when_save_plots_clicked(self):  # Mohamed Change: April 2025
+        import datetime as _dt
+
+        # Capture screenshots
+        screenshot1 = self.settingTab.grab()
+        screenshot2 = self.Plots1Tab.grab()
+        screenshot3 = self.main_window.grab()
+
+        # PowerPoint path from UI
+        ppt_path = self.main_window.ppt_path.toPlainText().strip()
+
+        # Make title = saved filename (matches JSON naming logic)
+        base = self._next_unique_data_name()
+        slide_title = f"{base}.json"
+
+        # Make slide text = date and time
+        slide_text = _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        image_positions = [
+                            (10, 75, 550, 450),
+                            (555, 155, 450, 400),
+                            (650, 5, 200, 150)
+                            ]
+
+        add_slide_with_qpixmap(
+            ppt_path=ppt_path,
+            slide_title=slide_title,
+            slide_text=slide_text,
+            pixmap_images=[screenshot2, screenshot1, screenshot3],
+            image_positions=image_positions
+        )
+        print("UI screenshot captured and saved.")
+
+
     def scan_finished(self):
         print('finished')
         self.when_save_plots_clicked()
@@ -159,7 +195,9 @@ class Scan(QtWidgets.QWidget):
         self.main_window.stop_equipments_for_scanning()
         self.logic.reset_flags()
         self.logic.go_scan = True
-        self.logic.initilize_data(self.info)
+        self.update_alllevel_setting_array()
+        self.logic.initialize_scan_data(self.info)
+        # self.logic.initilize_data(self.info)        #for old version
         self.update_all_plots()
         self.logic.start()
 
@@ -174,8 +212,13 @@ class Scan(QtWidgets.QWidget):
         while self.logic.isRunning():
             time.sleep(0.1)
     
+    def update_alllevel_setting_array(self):
+        self.all_level_setting.update_all_setting_array()
+
+
     def update_all_plots(self):
         """Call AllPlots.update_plots() for every page."""
+        self.update_alllevel_setting_array()
         for gp in self.graphing_plots:
             gp.update_plots()
 
@@ -190,7 +233,7 @@ class Scan(QtWidgets.QWidget):
                     if(current_target_index[w.setter_level_number]==0):
                         w.y_coordinates=np.full(w.setting_info_length, np.nan)
                     w.data=new_data                
-                    w.plot.clear()
+                    # plot_line method now handles clearing and preserves v_line position
                     w.plot_line(current_target_index)
                 if isinstance(w,ImagePlot):
                     w.update_image(new_data,current_target_index)
@@ -299,7 +342,7 @@ class Scan(QtWidgets.QWidget):
     #     except Exception as e:
     #         print(f'An error occurred while saving the presentation: {e}')
 
-    def when_save_plots_clicked(self):
+    def when_save_plots_clicked2(self):
         """Save a PowerPoint slide for every tab that actually shows plots."""
         serial = f'{self.main_window.scanlist.serial.value():04d}'
         name   = self._next_unique_data_name()  
@@ -355,6 +398,11 @@ class Scan(QtWidgets.QWidget):
 
             slide.shapes.add_picture(shot_path, left, top, width=nw, height=nh)
 
+            try:
+                os.remove(shot_path)          # delete the PNG immediately
+            except OSError:
+                pass                          # silent if, for any reason, it’s gone
+            
             # 4.  add name (bold) and comments box on left
             left_in = Inches(0.0)
             top_in  = Inches(0.2)
@@ -415,7 +463,7 @@ class Scan(QtWidgets.QWidget):
                 return super().default(obj)
 
         ppp_box = self.PlotsPerPage                      # QComboBox
-        self.info['plots_per_page'] = int(ppp_box.currentText())
+        self.info['plots_per_page'] = ppp_box.currentText()
 
         # Get user input and prepare base file name
         text = self.main_window.save_info_path.toPlainText().strip()
@@ -489,6 +537,7 @@ class Scan(QtWidgets.QWidget):
                     
                     info = json.loads(content)  # Use json.loads() instead of json.load(file)
                     self.info = convert_special_values(info)
+                    print("info",self.info)
 
                     ppp_val = self.info.get('plots_per_page', None)
                     if ppp_val is not None:
@@ -542,7 +591,7 @@ class Scan(QtWidgets.QWidget):
 
         for l in range(level_number):
             targets_array_FEL.append(self.info['levels'][f'level{l}']['setting_array'])
-            setters_targets_len_FEL.append(targets_array_FEL[l].shape[1]-1)
+            setters_targets_len_FEL.append(len(targets_array_FEL[l])-1)
         if self.info['data']:
             for gp in self.graphing_plots:
                 for plot in range(gp.plots_layout.count()):

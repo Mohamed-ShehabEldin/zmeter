@@ -1,9 +1,10 @@
+# from re import T
 from .scan_info import *
-import random
-import warnings
-from pptx import Presentation
-from pptx.util import Inches
-from scipy.interpolate import interp2d
+# import random
+# import warnings
+# from pptx import Presentation
+# from pptx.util import Inches
+# from scipy.interpolate import interp2d
 
 
 
@@ -12,7 +13,6 @@ class LinePlot(QtWidgets.QWidget):
     sig_info_changed = QtCore.pyqtSignal(object)
     
     def __init__(self, label=None,coordinate=None,setting_info=None,data=None):
-        # print(coordinate)
         super(LinePlot, self).__init__()
         uic.loadUi("core/ui/line_plot.ui", self)
         self.plot = pg.PlotWidget()
@@ -53,7 +53,6 @@ class LinePlot(QtWidgets.QWidget):
             # self.setting_info=setting_info[~np.isnan(setting_info)]
             self.setting_info_length=len(self.setting_info)
             self.x_coordinates = self.setting_info
-        # print(self.y_name)
         self.getter_number=int(self.y_name[3])
                 
         self.y_coordinates=np.full(self.setting_info_length, np.nan)
@@ -69,53 +68,150 @@ class LinePlot(QtWidgets.QWidget):
         if x_pos > self.x_coordinates[-1] or x_pos < self.x_start:
             self.label.setText('Out of bounds')
             return
+        
         left_bound_x = math.floor(x_pos)
-        left_val_x = self.setting_info[left_bound_x][0]
+        right_bound_x = math.ceil(x_pos)
+        
+        # Handle bounds checking
+        if left_bound_x < 0 or right_bound_x >= len(self.setting_info):
+            self.label.setText('Out of bounds')
+            return
+            
+        left_val_x = self.setting_info[left_bound_x]
+        right_val_x = self.setting_info[right_bound_x]
         left_bound_y = self.y_coordinates[int(left_bound_x)]
-        right_bound_x  = math.ceil(x_pos)
-        right_val_x = self.setting_info[right_bound_x][0]
         right_bound_y = self.y_coordinates[int(right_bound_x)]
         
-        x_pos_slope = self.slope(left_bound_x,left_val_x,right_bound_x,right_val_x)
-        x_val = (x_pos-left_bound_x)*x_pos_slope+left_val_x
-        slope = self.slope(left_bound_x,left_bound_y,right_bound_x,right_bound_y)
-        y_val = (x_pos-left_bound_x)*slope+left_bound_y
-        self.label.setText(f'X: {x_val:.4e}, Y: {y_val:.4e}')
+        # Handle X values that might be lists or single values, and might contain NaN
+        x_val_text = self._format_x_values(left_val_x, right_val_x, x_pos, left_bound_x, right_bound_x)
+        
+        # Handle Y value interpolation
+        if np.isnan(left_bound_y) or np.isnan(right_bound_y):
+            y_val_text = "NaN"
+        else:
+            slope = self.slope(left_bound_x, left_bound_y, right_bound_x, right_bound_y)
+            y_val = (x_pos - left_bound_x) * slope + left_bound_y
+            y_val_text = f"{y_val:.4e}" if abs(y_val) >= 1e-3 or y_val == 0 else f"{y_val:.4e}"
+        
+        self.label.setText(f'X: {x_val_text}, Y: {y_val_text}')
+    
+    def _format_x_values(self, left_val_x, right_val_x, x_pos, left_bound_x, right_bound_x):
+        """Format X values handling lists, single values, and NaN values"""
+        # Convert to numpy arrays if they aren't already
+        if not isinstance(left_val_x, (list, tuple, np.ndarray)):
+            left_val_x = [left_val_x]
+        if not isinstance(right_val_x, (list, tuple, np.ndarray)):
+            right_val_x = [right_val_x]
+            
+        left_val_x = np.array(left_val_x)
+        right_val_x = np.array(right_val_x)
+        
+        # Handle case where arrays have different lengths
+        min_len = min(len(left_val_x), len(right_val_x))
+        left_val_x = left_val_x[:min_len]
+        right_val_x = right_val_x[:min_len]
+        
+        x_values = []
+        for i in range(len(left_val_x)):
+            left_val = left_val_x[i]
+            right_val = right_val_x[i]
+            
+            # Handle NaN values
+            if np.isnan(left_val) or np.isnan(right_val):
+                x_values.append("NaN")
+            else:
+                # Interpolate between left and right values
+                x_pos_slope = self.slope(left_bound_x, left_val, right_bound_x, right_val)
+                x_val = (x_pos - left_bound_x) * x_pos_slope + left_val
+                
+                # Format the value
+                if abs(x_val) >= 1e-3 or x_val == 0:
+                    x_values.append(f"{x_val:.4e}")
+                else:
+                    x_values.append(f"{x_val:.4e}")
+        
+        # Join multiple values with commas
+        if len(x_values) == 1:
+            return x_values[0]
+        else:
+            return "[" + ", ".join(x_values) + "]"
 
     def slope(self,x1, y1, x2, y2): 
         if(x2 - x1 != 0): 
-            return (float)(y2-y1)/(x2-x1) 
-        return sys.maxint 
+            # return (float)(y2-y1)/(x2-x1) 
+            return (y2-y1)/(x2-x1)
+        return 0 
 
     def plot_line(self,current_target_index):
-        self.plot.clear()
-        self.v_line = pg.InfiniteLine(angle=90, movable=True)
-        self.plot.addItem(self.v_line)
-        self.v_line.sigPositionChanged.connect(self.update_label)
+        # Update the data point
         reversed_current_target_index=[]
         for i in reversed(current_target_index):
             reversed_current_target_index.append(i)
         index_tuple = tuple(reversed_current_target_index[0:len(current_target_index) - self.setter_level_number])
         self.y_coordinates[current_target_index[self.setter_level_number]] = self.data[self.setter_level_number][self.getter_number][index_tuple]
+        
+        # Remove existing data line if it exists
+        if hasattr(self, 'line') and self.line is not None:
+            try:
+                self.plot.removeItem(self.line)
+            except (ValueError, RuntimeError):
+                # Item might already be removed or invalid
+                pass
+        
+        # Check if v_line exists and is valid
+        v_line_exists = hasattr(self, 'v_line') and self.v_line is not None
+        
+        if v_line_exists:
+            try:
+                # Test if v_line is still valid by accessing its position
+                _ = self.v_line.pos()
+            except (AttributeError, RuntimeError):
+                v_line_exists = False
+            
+        if not v_line_exists:
+            # Only create v_line if it doesn't exist or is invalid
+            if hasattr(self, 'v_line') and self.v_line is not None:
+                try:
+                    self.plot.removeItem(self.v_line)
+                except (ValueError, RuntimeError):
+                    pass
+                    
+            self.v_line = pg.InfiniteLine(angle=90, movable=True)
+            self.plot.addItem(self.v_line)
+            self.v_line.sigPositionChanged.connect(self.update_label)
+        
+        # Add the updated data line
         self.line = self.plot.plot(list(self.x_coordinates), list(self.y_coordinates), pen=pg.mkPen(color=(240, 255, 255), width=2))
 
     def load_plot(self,data,target_index):
-        target_index=target_index[self.setter_level_number+1::]
-        reversed_current_target_index=[]
-        for i in reversed(target_index):
-            reversed_current_target_index.append(i)
-        index_list = list(reversed_current_target_index[0:len(target_index) - self.setter_level_number])
-        temp = data[self.setter_level_number][self.getter_number]
-        for i in index_list:
-            self.y_coordinates = temp[i]
-        self.line = self.plot.plot(list(self.x_coordinates), self.y_coordinates, pen=pg.mkPen(color=(240, 255, 255), width=2))
+        target_index=target_index[self.setter_level_number::]
+        reversed_current_target_index = target_index[::-1]
+        # for i in target_index[::-1]:
+        #     reversed_current_target_index.append(i)
+        # index_list = list(reversed_current_target_index[0:len(target_index) - self.setter_level_number])
+        # temp = data[self.setter_level_number][self.getter_number]
+        self.y_coordinates = np.array(data[self.setter_level_number][self.getter_number])
+        while True:
+            if self.y_coordinates.ndim > 1:
+                self.y_coordinates = self.y_coordinates[-1]
+            else:
+                break
+
+        # Remove existing data line if it exists
+        if hasattr(self, 'line') and self.line is not None:
+            try:
+                self.plot.removeItem(self.line)
+            except (ValueError, RuntimeError):
+                # Item might already be removed or invalid
+                pass
+        
+        # Add the new data line (preserve v_line)
+        try:
+            self.line = self.plot.plot(list(self.x_coordinates), self.y_coordinates, pen=pg.mkPen(color=(240, 255, 255), width=2))
+        except Exception as e:
+            print(e)
 
 
-if __name__ == "__main__":
-    app = QtWidgets.QApplication(sys.argv)
-    window = LinePlot()
-    window.show()
-    app.exec()
 class CustomROI(pg.ROI):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -232,141 +328,101 @@ class ImagePlot(pg.GraphicsLayoutWidget):
         y1 = math.floor(y)
         y2 = math.ceil(y)
 
-        if x1<0 or x2>self.data.shape[1]-1:
-            self.x_label.setText('Out of bounds')
-            self.y_label.setText('Out of bounds')
-            self.z_label.setText('Out of bounds')
-            return
+        # Handle bounds checking
+        x_out_of_bounds = x1 < 0 or x2 > self.data.shape[1] - 1
+        y_out_of_bounds = y1 < 0 or y2 > self.data.shape[0] - 1
         
-        if y1<0 or y2>self.data.shape[0]-1:
-            self.x_label.setText('Out of bounds')
-            self.y_label.setText('Out of bounds')
-            self.z_label.setText('Out of bounds')
-            return
-            
-        #x
-        xy_label_text='X: '
-        for setter,setting_points in self.x_setting_info.items():
-            X_1 = setting_points[x1]
-            X_2 = setting_points[x2]
-            x_print = (x-x1)*(X_2 - X_1) + X_1
-            xy_label_text+=f'{x_print:.4e},     '
-        # self.x_label.setText(x_label_text)
-
-
-
-        #y
-        xy_label_text+='Y: '
-        for setter,setting_points in self.y_setting_info.items():
-            Y_1 = setting_points[y1]
-            Y_2 = setting_points[y2]
-            y_print = (y-y1)*(Y_2 - Y_1) + Y_1
-            xy_label_text+=f'{y_print:.4e}'
-            
+        # Format X values
+        if x_out_of_bounds:
+            x_text = 'Out of bounds'
+        else:
+            x_text = self._format_xy_values(self.x_setting_info, x1, x2, x, 'x')
+        
+        # Format Y values  
+        if y_out_of_bounds:
+            y_text = 'Out of bounds'
+        else:
+            y_text = self._format_xy_values(self.y_setting_info, y1, y2, y, 'y')
+        
+        # Combine X and Y text
+        xy_label_text = f'X: {x_text},     Y: {y_text}'
         self.xy_label.setText(xy_label_text)
 
-        #z
-        value = self.data[int(y),int(x)]
-        self.z_label.setText(f'Value: {value:.4e}')
-
+        # Handle Z value
+        try:
+            if x_out_of_bounds or y_out_of_bounds:
+                self.z_label.setText('Out of bounds')
+            else:
+                value = self.data[int(y), int(x)]
+                if np.isnan(value):
+                    self.z_label.setText('Value: NaN')
+                else:
+                    self.z_label.setText(f'Value: {value:.4e}')
+        except IndexError:
+            self.z_label.setText('Out of bounds')
         return
     
-        # Adjust coordinates to account for pixel center
-        if 'level' in self.x_name:
-            if x1<0 or x2>self.data.shape[1]-1:
-                self.label.setText('Out of bounds')
-                return
-            if 'level' in self.y_name:
-                if y1 < 0 or y2>self.data.shape[0]-1:
-                    self.label.setText("Out of bounds")
-                    return
+    def _format_xy_values(self, setting_info, coord1, coord2, coord_pos, axis_name):
+        """Format X or Y values handling lists, single values, and NaN values"""
+        values = []
+        
+        for setter, setting_points in setting_info.items():
+            try:
+                # Handle bounds checking for this setter
+                if coord1 < 0 or coord1 >= len(setting_points) or coord2 >= len(setting_points):
+                    values.append("OOB")
+                    continue
+                    
+                val_1 = setting_points[coord1]
+                val_2 = setting_points[coord2]
+                
+                # Convert to numpy arrays if they aren't already
+                if not isinstance(val_1, (list, tuple, np.ndarray)):
+                    val_1 = [val_1]
+                if not isinstance(val_2, (list, tuple, np.ndarray)):
+                    val_2 = [val_2]
+                    
+                val_1 = np.array(val_1)
+                val_2 = np.array(val_2)
+                
+                # Handle case where arrays have different lengths
+                min_len = min(len(val_1), len(val_2))
+                val_1 = val_1[:min_len]
+                val_2 = val_2[:min_len]
+                
+                # Process each component
+                component_values = []
+                for i in range(len(val_1)):
+                    v1, v2 = val_1[i], val_2[i]
+                    
+                    # Handle NaN values
+                    if np.isnan(v1) or np.isnan(v2):
+                        component_values.append("NaN")
+                    else:
+                        # Interpolate between the two values
+                        interpolated = (coord_pos - coord1) * (v2 - v1) + v1
+                        
+                        # Format the value
+                        if abs(interpolated) >= 1e-3 or interpolated == 0:
+                            component_values.append(f"{interpolated:.4e}")
+                        else:
+                            component_values.append(f"{interpolated:.4e}")
+                
+                # Join multiple components with commas if more than one
+                if len(component_values) == 1:
+                    values.append(component_values[0])
                 else:
-                    value = self.data[int(y), int(x)]
-                    self.label.setText(f'Coordinates: ({x:.4e}, {y:.4e}), Value: {value:.4e}')
-            elif self.y_interpolate:
-                if y1 < 0 or y2>self.data.shape[0]-1:
-                    self.label.setText("Out of bounds")
-                    return
-                else:
-                    Y_1 = self.y_setting_info[y1]
-                    Y_2 = self.y_setting_info[y2]
-                    y_print = (y - y1)*(Y_2 - Y_1) + Y_1
-                    value = self.data[int(y), int(x)]
-                    self.label.setText(f'Coordinates: ({x:.4e}, {y_print:.4e}), Value: {value:.4e}')
-
-
-            else:
-                y_pixel = (y + 0.5 * self.y_step) / self.y_step
-                if 0 <= y_pixel < self.data.shape[0]:
-                    value = self.data[int(y_pixel),int(x)]
-                    self.label.setText(f'Coordinates: ({x:.4e}, {y+self.y_start:.4e}), Value: {value:.4e}')
-                else:
-                    self.label.setText('Out of bounds')
-                    return
-
-        elif self.x_interpolate:
-            if x1<0 or x2>self.data.shape[1]-1:
-                self.label.setText('Out of bounds')
-                return
-            X_1 = self.x_setting_info[x1]
-            X_2 = self.x_setting_info[x2]
-            x_print = (x - x1)*(X_2 - X_1) + X_1
-            if 'level' in self.y_name:
-                if y1 < 0 or y2>self.data.shape[0]-1:
-                    self.label.setText("Out of bounds")
-                    return
-                else:
-                    value = self.data[int(y), int(x)]
-                    self.label.setText(f'Coordinates: ({x_print:.4e}, {y:.4e}), Value: {value:.4e}')
-            elif self.y_interpolate:
-                if y1 < 0 or y2>self.data.shape[0]-1:
-                    self.label.setText("Out of bounds")
-                    return
-                else:
-                    Y_1 = self.y_setting_info[y1]
-                    Y_2 = self.y_setting_info[y2]
-                    y_print = (y - y1)*(Y_2 - Y_1) + Y_1
-                    value = self.data[int(y), int(x)]
-                    self.label.setText(f'Coordinates: ({x_print:.4e}, {y_print:.4e}), Value: {value:.4e}')
-            else:
-                y_pixel = (y + 0.5 * self.y_step) / self.y_step
-                if 0 <= y_pixel < self.data.shape[0]:
-                    value = self.data[int(y_pixel),int(x)]
-                    self.label.setText(f'Coordinates: ({x_print:.4e}, {y+self.y_start:.4e}), Value: {value:.4e}')
-                else:
-                    self.label.setText('Out of bounds')
-                    return
+                    values.append("[" + ", ".join(component_values) + "]")
+                    
+            except (IndexError, TypeError, ValueError):
+                values.append("Error")
+        
+        # Join values from different setters
+        if len(values) == 1:
+            return values[0]
         else:
-            x_pixel = (x + 0.5 * self.x_step) / self.x_step
-            x_print = x+self.x_start
-            if x_pixel<0 or x_pixel > self.data.shape[1]:
-                self.label.setText('Out of bounds')
-                return
-            if 'level' in self.y_name:
-                if y1 < 0 or y2>self.data.shape[0]-1:
-                    self.label.setText("Out of bounds")
-                    return
-                else:
-                    value = self.data[int(y), int(x_pixel)]
-                    self.label.setText(f'Coordinates: ({x_print:.4e}, {y:.4e}), Value: {value:.4e}')
-            elif self.y_interpolate:
-                if y1 < 0 or y2>self.data.shape[0]-1:
-                    self.label.setText("Out of bounds")
-                    return
-                else:
-                    Y_1 = self.y_setting_info[y1]
-                    Y_2 = self.y_setting_info[y2]
-                    y_print = (y - y1)*(Y_2 - Y_1) + Y_1
-                    value = self.data[int(y), int(x_pixel)]
-                    self.label.setText(f'Coordinates: ({x_print:.4e}, {y_print:.4e}), Value: {value:.4e}')
-            else:
-                y_pixel = (y + 0.5 * self.y_step) / self.y_step
-                if 0 <= y_pixel < self.data.shape[0]:
-                    value = self.data[int(y_pixel),int(x_pixel)]
-                    self.label.setText(f'Coordinates: ({x_print:.4e}, {y+self.y_start:.4e}), Value: {value:.4e}')
-                else:
-                    self.label.setText('Out of bounds')
-                    return
+            return " | ".join(values)
+    
 
     def keyPressEvent(self, event):
         pos = self.roi.pos()
@@ -382,14 +438,6 @@ class ImagePlot(pg.GraphicsLayoutWidget):
             self.roi.setPos([x, y + step])
         self.update_lines_from_roi()
 
-
-    def set_xyaxis(self, xlabel, ylabel, x, y):
-        x_indices = np.arange(len(x))
-        y_indices = np.arange(len(y))
-        self.plot.setLabels(bottom=xlabel, left=ylabel)
-        self.image.setRect(x_indices[0], y_indices[0], x_indices[-1] - x_indices[0], y_indices[-1] - y_indices[0])
-
-        
 
     def update_image(self,new_data,current_target_index):
         if (np.isnan(self.data[-1,-1]))==0:
@@ -408,23 +456,7 @@ class ImagePlot(pg.GraphicsLayoutWidget):
 
         self.image.setImage(self.data)
 
-    # def load_image(self,data,target_index):
-        
-    #     temp = data[self.x_level_number][self.getter_number]
-    #     target_index=target_index[self.y_level_number+1::]
-    #     reversed_target_index=[]
-    #     for i in reversed(target_index):
-    #         reversed_target_index.append(i)
-    #     if len(target_index) == 0:
-    #         self.data = temp
-            
-    #     else:
-    #         for i in reversed_target_index:
-    #             self.data = temp[i]
-    #     self.data = np.array(self.data)
-    #     # print(self.data)
 
-    #     self.image.setImage(self.data)    
     def load_image(self, data, target_index):
         temp = data[self.x_level_number][self.getter_number]
 
@@ -444,24 +476,6 @@ class ImagePlot(pg.GraphicsLayoutWidget):
         self.image.setImage(self.data)
 
 
- 
-
-
-
-
-if __name__ == "__main__":
-    app = QtWidgets.QApplication(sys.argv)
-    w = ImagePlot()
-    x = np.linspace(10, 20, 100)
-    y = np.linspace(5, 10, 100)
-    print(x[0], y[0], x[-1], y[-1])
-    xx, yy = np.meshgrid(x, y)
-    data = np.sin(xx)+yy
-    w.when_data_comes(data)
-    w.set_xyaxis('xchannel', 'ychannel', x, y)
-    w.when_data_comes(data)
-    w.show()
-    app.exec()
 
 
 class AllPlots(QtWidgets.QWidget):
@@ -496,7 +510,20 @@ class AllPlots(QtWidgets.QWidget):
         # 0.  How many plots per page right now?
         root = self.window()                      # Scan widget
         ppp = root.findChild(QtWidgets.QComboBox, "PlotsPerPage")
-        per_page = int(ppp.currentText()) if ppp else 9      # fallback 4
+
+        ppp_setting = ppp.currentText()
+        if ppp_setting == "2x1":
+            per_page = 2
+        elif ppp_setting == "2x2":
+            per_page = 4
+        elif ppp_setting == "2x4":
+            per_page = 8
+        elif ppp_setting == "3x3":
+            per_page = 9
+        elif ppp_setting == "3x4":
+            per_page = 12
+        else:
+            per_page = 4
 
         # 1.  Flatten every defined plot into one list
         all_coords: list[tuple[str, dict]] = []
@@ -516,9 +543,11 @@ class AllPlots(QtWidgets.QWidget):
 
         # 3.  Decide grid size from per_page
         if   per_page == 2:  self.grid_size = [2, 1]
-        elif   per_page == 4:  self.grid_size = [2, 2]
-        elif per_page == 8:  self.grid_size = [2, 4]
-        else:                self.grid_size = [3, 3]   # per_page == 9
+        elif per_page == 4:  self.grid_size = [2, 2]
+        elif per_page == 8:  self.grid_size = [2, 4]    
+        elif per_page == 9:  self.grid_size = [3, 3]
+        elif per_page == 12: self.grid_size = [3, 4]
+        else:                self.grid_size = [2, 2]   # per_page == 4
 
         # 4.  Create widgets
         row = col = 0
@@ -545,7 +574,6 @@ class AllPlots(QtWidgets.QWidget):
                 row += 1
 
     def get_setting_info_line(self,coordinate):
-        # print(self.level_info)
         x_name=coordinate['x']
         match_level = re.search(r'L(\d+)', x_name)
 
@@ -553,16 +581,16 @@ class AllPlots(QtWidgets.QWidget):
             level_number = match_level.group(1)
             level = f'level{level_number}'
             setting_array=self.level_info[level]['setting_array']
+            #might need to change this S to G
             match_setter = re.search(r'S(\d+)', x_name)
             setter_number = match_setter.group(1)
             
             return setting_array[int(setter_number)]
         else:
             level=f'level{x_name[-1]}'
-            # print(x_name)
-            
             setting_array=self.level_info[level]['setting_array']
             return setting_array
+        
     def get_setting_info_image(self,coordinate):
         x_name=coordinate['x']
         x_level=f'level{x_name[-1]}'
@@ -587,27 +615,6 @@ class AllPlots(QtWidgets.QWidget):
 
         return [x_setting_dict,y_setting_dict]
         
-
-    def get_number_of_plots(self):
-        if self.plot_setting_info is not None:
-            return (len(self.plot_setting_info['line_plots']) + len(self.plot_setting_info['image_plots']))
-        else:
-            return 0
-
-    def get_rows_cols(self):
-        n = self.get_number_of_plots()
-        a = int(np.sqrt(n))
-        row = a
-        col = a
-        if a**2 == n:
-            return [row, col]
-        if a**2 < n and n <= a*(a+1):
-            col += 1
-            return [row, col]
-        if a*(a+1) < n:
-            col += 1
-            row += 1
-            return [row, col]
 
 
 if __name__ == "__main__":

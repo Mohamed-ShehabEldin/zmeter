@@ -3,7 +3,7 @@ from .opticool_hardware import OptiCool_Hardware
 import time
 import numpy as np
 
-class OptiCool_Logic(QtCore.QThread):
+class OptiCoolLogic(QtCore.QThread):
     sig_last_temperature = QtCore.pyqtSignal(object)
     sig_last_field = QtCore.pyqtSignal(object)
     sig_setting_temperature = QtCore.pyqtSignal(object)
@@ -45,17 +45,27 @@ class OptiCool_Logic(QtCore.QThread):
         return val
 
     def set_field(self):
+        print("set_field_in")
         self.sig_setting_field.emit('setting...')
         self.hardware.set_field(self.setpoint_tesla*10000)
 
     def set_field_stable(self):
+        print("set_field_stable_in")
         self.set_field()
         while True:
+            print("...")
             [status, val, FieldStatusString] = self.hardware.get_field()
             self.sig_last_field.emit(val)
             if FieldStatusString == 'Holding':
+                print("FieldStatusString == Holding")
+                print("breaking")
                 break
             time.sleep(0.001)
+
+    def set_SET_field_stable(self, val):
+        """Set field setpoint in Tesla then run existing set_field_stable()."""
+        self.setpoint_tesla = float(val)
+        self.set_field_stable()
 
     def get_field(self):
         [status, val, FieldStatus] = self.hardware.get_field()
@@ -85,7 +95,7 @@ class OptiCool_Logic(QtCore.QThread):
 
 
 if __name__ == "__main__":
-    o = OptiCool_Logic()
+    o = OptiCoolLogic()
     o.setpoint_tesla = 1e-3
     o.set_field()
     # o.setpoint_temperature = 1.55

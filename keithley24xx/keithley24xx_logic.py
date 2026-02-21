@@ -174,6 +174,7 @@ class Keithley24xxLogic(QtCore.QThread):
         if not change_back_to_curr:
             self.sens_func_to_volt()
 
+
     def update_next_func(self, fn):
         self.next_func = fn
 

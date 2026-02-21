@@ -64,7 +64,7 @@ ScanInfo = {
                     "destinations": [0, 1, 2]
                 }
             },
-            "setting_method": "[A]",
+            "setting_method": "A+B,CL",
             "getters": ['lockin_0_Y'],
             "setting_array": [[0,1,2]]
         }
@@ -85,6 +85,7 @@ ScanInfo = {
 
 
 class ScanLogic(QtCore.QThread):
+    sig_capture_ui = QtCore.pyqtSignal() ######April 25
     sig_new_data = QtCore.pyqtSignal(object)
     sig_new_pos = QtCore.pyqtSignal(object)
     sig_update_line = QtCore.pyqtSignal()
@@ -97,6 +98,7 @@ class ScanLogic(QtCore.QThread):
     AO = ['AO0', 'AO1', 'AO2', 'AO3']
 
     def __init__(self, main_window=None):
+        super().__init__() ######April 25 #importnat in April 25 edits
         QtCore.QThread.__init__(self)
         self.main_window = main_window
         self.reset_flags()
@@ -114,6 +116,7 @@ class ScanLogic(QtCore.QThread):
         # Calculate total number of points in the scan
         self.total_points = 1
         for l in range(len(info['levels'])):
+            print(info['levels'][f'level{l}']['setting_array'])
             self.total_points *= info['levels'][f'level{l}']['setting_array'].shape[1]
         
 
@@ -204,8 +207,6 @@ class ScanLogic(QtCore.QThread):
             for key, value in setting_dict.items():
                 if self.received_stop:
                     return
-                if 'control' in key:
-                    self.main_window.execute_control(value,key)
                 else:
                     self.main_window.write_info(value, key)
 
@@ -256,6 +257,7 @@ class ScanLogic(QtCore.QThread):
 
         self.current_target_indexs[l] = 0
 
+
     def write(self, lv, index):
         artificial_setters_and_vals = {}  # {artificial channel name ; val}
         for i, ss in enumerate(self.setters_FEL[lv]):
@@ -263,8 +265,6 @@ class ScanLogic(QtCore.QThread):
             variable = self.get_variable(ss)
             if variable in self.main_window.equations:
                 self.main_window.write_artificial_channel(val, variable)
-            elif('control' in ss):
-                self.main_window.execute_control(val,ss)
             else:
                 self.main_window.write_info(val, ss)
 

@@ -1,138 +1,149 @@
+import re
 import numpy as np
 
 
 class Brakets:
+    """
+    Sequential-and-parallel scheduler.
+
+    ● If `personalized_input=True`  →  follow the user-supplied `cmd`.
+    ● If `personalized_input=False` →  ignore `cmd` and auto-create one
+      that lists *every* destination key once (“A,B,C,…”).
+
+    Destinations may be Python lists **or** NumPy arrays.
+    Channel names are treated case-insensitively.
+    """
+
+    # ------------------------------------------------------------------ #
     def __init__(self,
-                 cmd='[BA]',
-                 destinations={'A': [100, 101],
-                               'B': [110],
-                               'C': [120, 121],
-                               'D': [130, 131],
-                               'E': [140],
-                               'F': [150], }):
-        self.cmd = cmd
-        self.destinations = destinations
-        self.all_channels = list(destinations.keys())
-        self.output = np.empty([len(self.all_channels), self.find_cmd_length(cmd)])
-        self.output[:, :] = np.nan
+                 cmd: str | list = "A+B,C,D+E",
+                 destinations: dict[str, list | np.ndarray] | None = None,
+                 personalized_input: bool = True):
 
-        self.unpack(cmd)
-        # print(self.output)
+        # ---------- default demo table -------------------------------------
+        if destinations is None:
+            destinations = {'A': [100, 101],
+                            'b': np.array([110]),        # note the lower-case
+                            'C': [120, 121],
+                            'd': np.array([130, 131]),
+                            'E': [140],
+                            'F': [150]}
 
-    def un_braket(self, cmd):
-        """
-        un-braket a single level.
-        (A[(BC)(DE)]F)  --> A, [(BC)(DE)], F
-        """
-        if cmd[0] not in ['(', '[']:
-            return []
-        if cmd[0] == '(':
-            kuohao = '()'
-        else:
-            kuohao = '[]'
+        # ---------- normalise destination table (upper-case keys) ----------
+        # Also coerce every value to a 1-D NumPy array for consistent length
+        self.destinations = {k.upper(): np.asarray(v).ravel()
+                             for k, v in destinations.items()}
 
-        cmd = cmd[1:-1]
-        elements = []
-        while cmd != '':
-            temp = ''
-            if cmd[0] == '(':
-                counter = 1
-                temp += cmd[0]
-                cmd = cmd[1:]
-                while counter != 0:
-                    if cmd[0] == '(':
-                        counter += 1
-                        temp += cmd[0]
-                        cmd = cmd[1:]
-                    elif cmd[0] == ')':
-                        counter -= 1
-                        temp += cmd[0]
-                        cmd = cmd[1:]
-                    else:
-                        temp += cmd[0]
-                        cmd = cmd[1:]
-                elements.append(temp)
-                temp = ''
-            elif cmd[0] == '[':
-                counter = 1
-                temp += cmd[0]
-                cmd = cmd[1:]
-                while counter != 0:
-                    if cmd[0] == '[':
-                        counter += 1
-                        temp += cmd[0]
-                        cmd = cmd[1:]
-                    elif cmd[0] == ']':
-                        counter -= 1
-                        temp += cmd[0]
-                        cmd = cmd[1:]
-                    else:
-                        temp += cmd[0]
-                        cmd = cmd[1:]
-                elements.append(temp)
-                temp = ''
-            else:
-                elements.append(cmd[0])
-                cmd = cmd[1:]
-        return elements
+        # ---------- build / parse the command ------------------------------
+        if not personalized_input:                    # auto: A,B,C,…
+            cmd_letters = ','.join(self.destinations.keys())
+            cmd = self._parse_plus_comma(cmd_letters)
+        elif isinstance(cmd, str):                   # user text → parse
+            cmd = self._parse_plus_comma(cmd)
 
-    def find_cmd_length(self, cmd):
-        """
-        get what is the round of the setting id when cmd runs up.
-        calculate recursivly.
-        """
-        n = 0
-        if cmd == '':
-            return 0
+        # make every leaf upper-case so look-ups are case-insensitive
+        self.cmd = self._upperise(cmd)
 
-        elif cmd[0] == '(':
-            for c in self.un_braket(cmd):
-                n += self.find_cmd_length(c)
+        # keep channel order exactly as it appears in the (now upper-case) dict
+        self.all_channels = list(self.destinations.keys())
 
-        elif cmd[0] == '[':
-            temp_id=[]
-            for sub_bracket in self.un_braket(cmd):
-                temp_id.append(self.find_cmd_length(sub_bracket))
-            n += max(temp_id)
+        # ---------- allocate output ----------------------------------------
+        total_cols = self._length(self.cmd, parallel=False)
+        self.output = np.full((len(self.all_channels), total_cols), np.nan)
 
-        else:
-            # letter = cmd[0]
-            # n += len(self.destinations[letter])
-            # at this point the command should already be single letters
-            n += len(self.destinations[cmd])
+        # ---------- fill ----------------------------------------------------
+        self._unpack(self.cmd, start_col=0, parallel=False)
 
-        return n
+    # ====================================================================== #
+    #  Helpers
+    # ====================================================================== #
+    @staticmethod
+    def _parse_plus_comma(text: str) -> list:
+        """'A+B , c , d+E' → [['A','B'], 'c', ['d','E']]   (whitespace ignored)"""
+        out: list = []
+        for chunk in re.split(r'\s*,\s*', text.strip()):
+            if not chunk:
+                continue
+            parts = [p for p in re.split(r'\s*\+\s*', chunk) if p]
+            out.append(parts if len(parts) > 1 else parts[0])
+        return out
 
-    def unpack(self, cmd, id=0):
-        """
-        inserting the correct destination of the corresponding master to the correct position in the array.
-        id is where to start adding the numbers to the array.
-        if finished an '(' insert, id should adding up the just finished cmd length.
-        if finished an '[' insert, id should not adding up the just finished cmd length.
-        if finally meets an letter, filling up the array
-        """
-        if cmd == '':
-            return
+    @staticmethod
+    def _upperise(node):
+        """Recursively turn every string leaf into upper-case."""
+        if isinstance(node, list):
+            return [Brakets._upperise(sub) for sub in node]
+        return node.upper()
 
-        elif cmd[0] == '(':
-            for sub_bracket in self.un_braket(cmd):
-                self.unpack(sub_bracket, id=id)
-                id += self.find_cmd_length(sub_bracket)
+    # ------------------------------------------------------------------ #
+    def _val_len(self, values: np.ndarray) -> int:
+        """Length of a 1-D NumPy array (already flattened)."""
+        return values.size
 
-        elif cmd[0] == '[':
-            for sub_bracket in self.un_braket(cmd):
-                self.unpack(sub_bracket, id=id)
+    def _length(self, node, *, parallel: bool) -> int:
+        """Recursive column count."""
+        if isinstance(node, list):
+            if parallel:            # inner list ⇒ parallel: max
+                return max((self._length(sub, parallel=False) for sub in node),
+                           default=0)
+            # outer list ⇒ sequential: sum
+            return sum(self._length(sub,
+                                     parallel=isinstance(sub, list))
+                       for sub in node)
 
-        else:  # at this point the command should already be single letters
-            for i in range(len(self.destinations[cmd])):
-                channel_id = self.all_channels.index(cmd)
-                self.output[channel_id, id] = self.destinations[cmd][i]
-                id += 1  # this is only for filling one by one
+        # single channel leaf
+        vals = self.destinations.get(node, np.asarray([]))
+        return self._val_len(vals)
+
+    # ------------------------------------------------------------------ #
+    def _unpack(self, node, *, start_col: int, parallel: bool):
+        """Recursive writer into self.output."""
+        if isinstance(node, list):
+            if parallel:            # all branches share the same start_col
+                for sub in node:
+                    self._unpack(sub, start_col=start_col, parallel=False)
+            else:                   # sequential: walk the cursor
+                col = start_col
+                for sub in node:
+                    self._unpack(sub,
+                                 start_col=col,
+                                 parallel=isinstance(sub, list))
+                    col += self._length(sub,
+                                        parallel=isinstance(sub, list))
+        else:                       # single channel
+            vals = self.destinations.get(node)
+            if vals is None or vals.size == 0:
+                return                                # skip unknown / empty
+
+            row = self.all_channels.index(node)
+            n = self._val_len(vals)
+            self.output[row, start_col:start_col + n] = vals
+
+    # ====================================================================== #
+    #  Convenience: pretty print
+    # ====================================================================== #
+    def __repr__(self):
+        return f"Brakets(output=\n{self.output})"
 
 
+# ------------------------------------------------------------------------- #
+#  Demos
+# ------------------------------------------------------------------------- #
 if __name__ == "__main__":
-    # Brakets()
-    Brakets(cmd='[AB]',
-            destinations={'A': [100, 101, 102],
-                          'B': [110,100, 101, 102],
-                           })
+
+    print("— personalised, mixed case in cmd & destinations —")
+    demo1 = Brakets(cmd="a+B,CCC,c,d+e+F",
+                    destinations={'a': [1, 2],
+                                  'B': np.array([3]),
+                                  'c': [4, 5],
+                                  'E': [99],      # not referenced → ignored
+                                  'f': np.array([6])},
+                    personalized_input=True)
+    print(demo1.output)
+
+    print("\n— auto-generated cmd (personalised=False) —")
+    demo2 = Brakets(cmd="",                        # ignored
+                    destinations={'A': np.array([10, 11])
+                                  },
+                    personalized_input=False)
+    print(demo2.output)

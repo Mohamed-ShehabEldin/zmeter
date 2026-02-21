@@ -135,10 +135,10 @@ class SR860(QtWidgets.QWidget):
         self.disconnect_pushButton.clicked.connect(self.disconnect_device)
 
         # ----- periodic monitor -----
-        self.timer = QtCore.QTimer(self)
-        self.timer.timeout.connect(self.monitor)
-        self.timer.start(50)
-        self.stop_signal.connect(self.stop_timer)
+        # self.timer = QtCore.QTimer(self)
+        # self.timer.timeout.connect(self.monitor)
+        # self.timer.start(50)
+        # self.stop_signal.connect(self.stop_timer)
 
     # ------------------------------------------------------------------
     # UI helpers
