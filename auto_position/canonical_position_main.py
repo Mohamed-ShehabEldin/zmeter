@@ -1,4 +1,4 @@
-from PyQt5 import QtWidgets, uic
+from PyQt6 import QtWidgets, uic
 import canonical_position_logic as logic
 from nidaq_hardware import NIDAQHardWare
 

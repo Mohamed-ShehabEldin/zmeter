@@ -7,9 +7,34 @@ from PyQt6 import QtWidgets, uic, QtCore
 
 
 from sr830.sr830_main import SR830
-from nidaq.nidaq_main import NIDAQ
 from keithley24xx.keithley24xx_main import Keithley24xx
-from k10cr1.k10cr1_main import K10CR1
+
+# PyDAQmx only works on Windows and Linux, not macOS
+try:
+    from nidaq.nidaq_main import NIDAQ
+    NIDAQ_AVAILABLE = True
+except (ImportError, NotImplementedError) as e:
+    print(f"⚠️  NIDAQ module unavailable on this platform: {e}")
+    NIDAQ_AVAILABLE = False
+    NIDAQ = None
+
+# K10CR1 (Thorlabs stepper motor) only works on Windows with DLL
+try:
+    from k10cr1.k10cr1_main import K10CR1
+    K10CR1_AVAILABLE = True
+except (ImportError, NameError, NotImplementedError) as e:
+    print(f"⚠️  K10CR1 module unavailable on this platform: {e}")
+    K10CR1_AVAILABLE = False
+    K10CR1 = None
+
+# OptiCool (Windows only - requires pythonnet)
+try:
+    from opticool.opticool_main import OptiCool
+    OPTICOOL_AVAILABLE = True
+except (ImportError, ModuleNotFoundError) as e:
+    print(f"⚠️  OptiCool module unavailable on this platform: {e}")
+    OPTICOOL_AVAILABLE = False
+    OptiCool = None
 
 from core.scan_info import *
 from core.scanlist import ScanList
@@ -36,11 +61,17 @@ class MainWindow(QtWidgets.QWidget):
         self.equips = {
             "lockin_0": SR830(),
             # "lockin_1": SR830(),
-            "nidaq_0": NIDAQ(),
-            "HWP_0": K10CR1(),
             "Keithley_0": Keithley24xx(),
             # "Keithley_1": Keithley24xx()
         }
+        
+        # Only add NIDAQ if available (not supported on macOS)
+        if NIDAQ_AVAILABLE:
+            self.equips["nidaq_0"] = NIDAQ()
+        
+        # Only add K10CR1 if available (Windows only)
+        if K10CR1_AVAILABLE:
+            self.equips["HWP_0"] = K10CR1()
         
         #self.equips["nidaq_0"].connect("Dev1")
         # self.equips["HWP_0"].connect(serial = "55369504")
