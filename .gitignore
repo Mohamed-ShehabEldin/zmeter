@@ -7,3 +7,7 @@ __pycache__/
 **/.DS_Store
 **/tempCodeRunnerFile.py
 **/try.py
+Kinesis/*
+!Kinesis/README.txt
+k10cr1/Kinesis/*
+!k10cr1/Kinesis/README.txt
