@@ -1,4 +1,5 @@
 from PyQt6 import QtWidgets, uic, QtCore
+import os
 import sys
 from .tlpm_logic import TLPMLogic
 import numpy as np
@@ -8,7 +9,8 @@ import pyqtgraph as pg
 class TLPM(QtWidgets.QWidget):
     def __init__(self):
         super(TLPM, self).__init__()
-        uic.loadUi("tlpm/tlpm.ui", self)
+        ui_path = os.path.join(os.path.dirname(__file__), "tlpm.ui")
+        uic.loadUi(ui_path, self)
         self.logic = TLPMLogic()
         self.connect_sig_slot()
         self.power_log = np.zeros(1000)
@@ -83,9 +85,12 @@ class TLPM(QtWidgets.QWidget):
         self.logic.receieved_stop = True
 
     def force_stop(self):
+        self.stop_indef()
         self.disconnect()
 
     def terminate_dev(self):
+        self.stop_indef()
+        self.disconnect()
         print("TLPM terminated.")
 
 
@@ -93,4 +98,4 @@ if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     window = TLPM()
     window.show()
-    app.exec()
+    sys.exit(app.exec())

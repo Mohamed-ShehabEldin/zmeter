@@ -20,4 +20,3 @@ typing-extensions==4.13.2
 xlsxwriter==3.2.2
 pyserial==3.5
 scipy==1.15.2
-pyserial==3.5

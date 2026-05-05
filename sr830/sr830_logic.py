@@ -54,13 +54,15 @@ class SR830_Logic(QtCore.QThread):
 
         self.connected = False
         self.monitoring_receieved_stop = False
-        self.reject_siginal =False 
+        self.reject_signal = False
         
 
         self.hardware=SR830_Hardware()
 ###
 
     def connect_visa(self, address):
+        if self.hardware is None:
+            self.hardware = SR830_Hardware()
         self.hardware.connect_visa(address)
         self.sig_connected.emit(f'connected to {address}')
         self.connected = True
@@ -302,7 +304,7 @@ class SR830_Logic(QtCore.QThread):
 #####
     def run(self):
         # used for force stop
-        if self.reject_siginal:
+        if self.reject_signal:
             return
         #Check if connected to harware
         if not self.connected:

@@ -1,3 +1,4 @@
+import os
 from PyQt6 import QtWidgets, uic, QtCore
 import sys
 import time
@@ -24,7 +25,8 @@ class SR860(QtWidgets.QWidget):
         super().__init__()
 
         # ----- load UI -----
-        uic.loadUi("sr860/sr860.ui", self)
+        ui_path = os.path.join(os.path.dirname(__file__), "sr860.ui")
+        uic.loadUi(ui_path, self)
 
         # ----- helper plot widget (X, Y, R, Theta streams) -----
         w = pg.GraphicsLayoutWidget(show=True)
@@ -41,8 +43,13 @@ class SR860(QtWidgets.QWidget):
         self.graph_xyrt.addWidget(w)
 
         # ----- VISA resource list -----
-        resource_manager = pyvisa.ResourceManager()
-        self.address_cb.addItems(resource_manager.list_resources())
+        try:
+            resource_manager = pyvisa.ResourceManager()
+            resources = resource_manager.list_resources()
+        except Exception as exc:
+            print(f"[WARN] Could not list SR860 VISA resources: {exc}")
+            resources = []
+        self.address_cb.addItems(resources)
 
         # ----- logic / model layer -----
         self.logic = SR860_Logic()
@@ -64,9 +71,6 @@ class SR860(QtWidgets.QWidget):
             for method in dir(self.logic)
             if callable(getattr(self.logic, method)) and method.startswith("set_")
         ]
-        print("get_methods")
-        print(self.get_methods)
-        print(self.set_methods)
 
         # ----- connect logic signals to update-slots -----
         self.logic.sig_frequency.connect(self.update_frequency)
@@ -135,10 +139,10 @@ class SR860(QtWidgets.QWidget):
         self.disconnect_pushButton.clicked.connect(self.disconnect_device)
 
         # ----- periodic monitor -----
-        # self.timer = QtCore.QTimer(self)
-        # self.timer.timeout.connect(self.monitor)
-        # self.timer.start(50)
-        # self.stop_signal.connect(self.stop_timer)
+        self.timer = QtCore.QTimer(self)
+        self.timer.timeout.connect(self.monitor)
+        self.timer.start(50)
+        self.stop_signal.connect(self.stop_timer)
 
     # ------------------------------------------------------------------
     # UI helpers
@@ -169,12 +173,17 @@ class SR860(QtWidgets.QWidget):
     # ------------------------------------------------------------------
     # VISA connection
     # ------------------------------------------------------------------
-    def connect_visa(self, addr):
-        if addr == None or addr == False:
+    def connect_visa(self, addr=None):
+        if addr is None or addr is False:
             addr = self.address_cb.currentText()
-        print(f"Connecting to {addr}")
-        self.logic.connect_visa(addr)
-        self.address_cb.setCurrentText(addr)
+        if not addr:
+            self.update_status("No SR860 VISA address selected")
+            return
+        try:
+            self.logic.connect_visa(addr)
+            self.address_cb.setCurrentText(addr)
+        except Exception as exc:
+            self.update_status(f"SR860 connection failed: {exc}")
 
     # ------------------------------------------------------------------
     # get_/set_ wrappers (naming follows sr860_logic)

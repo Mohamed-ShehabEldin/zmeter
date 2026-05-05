@@ -2,6 +2,8 @@
 
 A Python-based toolkit for precision electro-optical measurements.
 
+Last updated: May 5th, 2026
+
 ---
 
 ## Overview

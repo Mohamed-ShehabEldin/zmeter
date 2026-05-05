@@ -1,14 +1,18 @@
-from PyQt6 import QtWidgets, uic, QtCore
+from PyQt6 import QtWidgets, uic
+import os
 import sys
-from k10cr1.k10cr1_logic import K10CR1Logic
-import numpy as np
-import pyqtgraph as pg
+
+try:
+    from .k10cr1_logic import K10CR1Logic
+except ImportError:
+    from k10cr1.k10cr1_logic import K10CR1Logic
 
 
 class K10CR1(QtWidgets.QWidget):
     def __init__(self):
         super(K10CR1, self).__init__()
-        uic.loadUi(r"k10cr1/k10cr1.ui", self)
+        ui_path = os.path.join(os.path.dirname(__file__), "k10cr1.ui")
+        uic.loadUi(ui_path, self)
         self.logic = K10CR1Logic()
         self.connect_sig_slot()
         self.lineEdit.setText("55000923")
@@ -48,8 +52,8 @@ class K10CR1(QtWidgets.QWidget):
         self.last_pos_label.setText(f"last positon: {deg} deg <-- {pos}")
 
     def update_info(self, info):
-        #self.info_label.setText(info)
-        print(info)
+        self.info_label.setText(str(info))
+
     def connect(self):
         self.logic.do_connect = True
         serial = self.lineEdit.text()
@@ -77,4 +81,4 @@ if __name__ == "__main__":
     window = K10CR1()
     window.show()
     window.lineEdit.setText("55000923")
-    app.exec_()
+    app.exec()

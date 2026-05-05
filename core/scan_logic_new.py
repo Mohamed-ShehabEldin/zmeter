@@ -63,6 +63,7 @@ ScanInfo = {
             },
             "setting_method": "[AB]",  # Method identifier for how to apply settings
             "getters": ['lockin_0_X'],  # Channels to read measurements from
+            "settle_time": 0.0,  # Delay after write and before read at this level (seconds)
             # 2D array: [setter_values][point_index] - NaN values skip that setter
             "setting_array": [[0,1,2,3,4,5,6,7,8,9,10],
                               [-1,1,0,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]]
@@ -88,6 +89,7 @@ ScanInfo = {
             },
             "setting_method": "A+B,CL",
             "getters": ['lockin_0_Y'],
+            "settle_time": 0.0,
             "setting_array": [[0,1,2]]
         }
     },
@@ -132,27 +134,29 @@ class ScanLogic(QtCore.QThread):
     sig_scan_finished = QtCore.pyqtSignal()                 # Scan completion notification
     sig_update_remaining_time = QtCore.pyqtSignal(str)      # Time estimate updates
     sig_update_remaining_points = QtCore.pyqtSignal(str)    # Progress tracking updates
+    sig_auto_backup = QtCore.pyqtSignal(bool)                   # Auto-backup trigger every hour
 
     # Hardware channel definitions for NI-DAQ analog I/O
     AI = ['AI0', 'AI1', 'AI2', 'AI3', 'AI4', 'AI5', 'AI6', 'AI7']  # Analog input channels
     AO = ['AO0', 'AO1', 'AO2', 'AO3']                              # Analog output channels
 
     def __init__(self, main_window=None):
-        """
-        Initialize the scanning logic thread.
-        
-        Args:
-            main_window: Reference to main application window for hardware communication
-        """
         QtCore.QThread.__init__(self)
         self.main_window = main_window
+
+        # --- NEW: pause primitives ---
+        self._pause_mutex = QtCore.QMutex()
+        self._pause_cond = QtCore.QWaitCondition()
+        self.received_pause = False  # NEW
+
         self.reset_flags()
-        
+
         # Progress tracking variables
         self.scan_start_time = None
         self.elapsed_time = None
         self.total_points = 0
         self.completed_points = 0
+        self.last_auto_hour_triggered = 0
 
     def initialize_scan_data(self, scan_config):
         """
@@ -171,6 +175,7 @@ class ScanLogic(QtCore.QThread):
         self.scan_start_time = None
         self.elapsed_time = None
         self.completed_points = 0
+        self.last_auto_hour_triggered = 0
         
         # Calculate total number of measurement points across all levels
         self.total_points = 1
@@ -185,6 +190,7 @@ class ScanLogic(QtCore.QThread):
         self.level_target_counts = []      # Number of points per level (including NaN)
         self.level_getter_counts = []      # Number of measurement channels per level
         self.level_manual_settings = []    # Manual settings before/after each level
+        self.level_settle_times = []       # Delay between write and read for each level
         self.stop_scan = False             # Flag for graceful scan termination
         
         # Extract configuration data for each scanning level
@@ -213,6 +219,7 @@ class ScanLogic(QtCore.QThread):
             temp_manual_set = [scan_config['levels'][f'level{level_index}']['manual_set_before'], 
                               scan_config['levels'][f'level{level_index}']['manual_set_after']]
             self.level_manual_settings.append(temp_manual_set)
+            self.level_settle_times.append(float(scan_config['levels'][f'level{level_index}'].get('settle_time', 0.0)))
 
         # Count getter channels for each level
         for getters in self.level_getters:
@@ -238,101 +245,131 @@ class ScanLogic(QtCore.QThread):
 
     def reset_flags(self):
         """Reset all control flags to their default states."""
-        self.go_scan = False           # Start scanning flag
-        self.go_save = False           # Save data flag  
-        self.received_stop = False     # Stop request flag
+        self.go_scan = False
+        self.go_save = False
+        self.received_stop = False
+
+        self.received_pause = False
+        self._pause_cond.wakeAll()
+
+    @QtCore.pyqtSlot()
+    def request_pause(self):
+        """Pause the scan (thread will block at safe points)."""
+        with QtCore.QMutexLocker(self._pause_mutex):
+            self.received_pause = True
+
+    @QtCore.pyqtSlot()
+    def request_resume(self):
+        """Resume the scan if paused."""
+        with QtCore.QMutexLocker(self._pause_mutex):
+            self.received_pause = False
+            self._pause_cond.wakeAll()
+
+    @QtCore.pyqtSlot()
+    def request_stop(self):
+        """Stop the scan; also releases any pause wait."""
+        with QtCore.QMutexLocker(self._pause_mutex):
+            self.received_stop = True
+            self.received_pause = False
+            self._pause_cond.wakeAll()
+
+    def _pause_gate(self) -> bool:
+        """
+        Block here while paused.
+        Returns True if a stop was requested (caller should exit).
+        """
+        self._pause_mutex.lock()
+        try:
+            while self.received_pause and not self.received_stop:
+                # Wait with a timeout so the thread can still react quickly
+                # even if a wake is missed (rare but safe).
+                self._pause_cond.wait(self._pause_mutex, 200)  # ms
+            return self.received_stop
+        finally:
+            self._pause_mutex.unlock()
 
     def looping(self, current_level):
-        """
-        Recursively execute scanning loops for all levels.
-        
-        This is the core scanning algorithm that implements nested parameter sweeps.
-        Higher-numbered levels (outer loops) change slower than lower-numbered levels
-        (inner loops). The recursion naturally creates the nested loop structure.
-        
-        Execution order for a 2-level scan:
-        1. Set level1 to first value
-        2. Set level0 to first value, measure, recurse to level -1 (measure)
-        3. Set level0 to second value, measure, recurse to level -1 (measure)
-        4. ... continue through all level0 values
-        5. Set level1 to second value
-        6. Repeat steps 2-4 for all level0 values
-        7. Continue until all level1 values are complete
-        
-        Args:
-            current_level: Current recursion level (max_level down to -1)
-                          -1 indicates end of recursion (measurement point)
-        """
-        # Base case: reached the end of recursion
+        # Base case
         if current_level == -1:
             return
-        
-        # Record start time when beginning the outermost level (first call)
+
+        if self._pause_gate() or self.received_stop:
+            return
+
         if current_level == self.max_level and self.scan_start_time is None:
             self.scan_start_time = time.time()
 
-        # Execute any manual settings configured to run before this level
+        # Manual set BEFORE
         for setting_dict in self.level_manual_settings[current_level][0]:
             for key, value in setting_dict.items():
-                if self.received_stop:
+                if self._pause_gate() or self.received_stop:
                     return
-                else:
-                    self.main_window.write_info(value, key)
+                self.main_window.write_info(value, key)
 
         reading_device_channels = self.group_reading_device_channels(current_level)
-        writing_device_channels = self.group_writing_device_channels(current_level)
-        
-        # Iterate through all target points at this level
+
         for target_index in range(self.level_target_counts[current_level]):
-            if self.received_stop:
+            if self._pause_gate() or self.received_stop:
                 return
-            
-            # Set parameter values for all setters at this level
-            self.multi_thread_write(writing_device_channels, current_level, target_index)
-            
-            # Skip measurement if no getter channels defined for this level
+
+            # write
+            self.multi_thread_write(current_level, target_index)
+
+            if self._pause_gate() or self.received_stop:
+                return
+
             if self.level_getter_counts[current_level] == 0:
                 break
-            
-            if self.received_stop:
-                return
-            # Read measurements from all getter channels at this level
-            # measurements = self.read_level_measurements(current_level)
-            measurements = self.multi_thread_read(reading_device_channels)
 
-            # Store measurements in the appropriate data array location
+            settle_time = self.level_settle_times[current_level]
+            if settle_time > 0 and len(reading_device_channels) > 0:
+                time.sleep(settle_time)
+
+            if self._pause_gate() or self.received_stop:
+                return
+
+            # read
+            if self.main_window.artificial_channel_logic.consume_skip_read_for_scan():
+                measurements = self.build_nan_measurements(reading_device_channels)
+            else:
+                measurements = self.multi_thread_read(reading_device_channels)
+
+            if self._pause_gate() or self.received_stop:
+                return
+
+            # store measurements
             for getter_index in range(len(self.level_getters[current_level])):
-                 # Build index tuple for N-dimensional data array access
                 getter_channel = self.level_getters[current_level][getter_index]
                 if getter_channel == "none":
                     continue
-                indices_slice = slice(self.max_level, current_level, -1)  # Outer level indices
+                indices_slice = slice(self.max_level, current_level, -1)
                 indices = self.current_target_indices[indices_slice]
                 full_index_tuple = (getter_index, *indices, self.current_target_indices[current_level])
-                self.level_data_arrays[current_level][full_index_tuple] = measurements[getter_channel]           
-            
-            # Emit new data signal for real-time GUI updates
+                self.level_data_arrays[current_level][full_index_tuple] = measurements[getter_channel]
+
             current_target_indices_copy = deepcopy(self.current_target_indices)
             self.sig_new_data.emit([self.level_data_arrays, current_target_indices_copy])
 
-            # Recursively execute lower levels (inner loops)
+            # Skip lower/faster levels when an artificial-channel write was skipped.
+            # if not skip_lower_level:
+                # self.looping(current_level - 1)
             self.looping(current_level - 1)
 
-            # Update progress tracking after completing this measurement point
+            # progress updates
             self.current_target_indices[current_level] += 1
             point_end_time = time.time()
             self.elapsed_time = point_end_time - self.scan_start_time
             self.completed_points += 1
-            
-            # Update time remaining estimates for user feedback
             self.update_remaining_time_estimate()
+            self.check_auto_backup_trigger()
 
-        # Execute any manual settings configured to run after this level
+        # Manual set AFTER
         for setting_dict in self.level_manual_settings[current_level][1]:
             for key, value in setting_dict.items():
+                if self._pause_gate() or self.received_stop:
+                    return
                 self.main_window.write_info(value, key)
 
-        # Reset this level's index counter for next iteration of outer level
         self.current_target_indices[current_level] = 0
 
     def extract_device_from_channel(self, channel_name):
@@ -360,8 +397,8 @@ class ScanLogic(QtCore.QThread):
                     return device_name, variable
             if channel_name.startswith("artificial_channel_"):
                 return "artificial_channel", channel_name[len("artificial_channel_"):]
-            elif channel_name.startswith("default_channel_"):
-                return "default", channel_name[len("default_")+1:]
+            elif channel_name.startswith("default_"):
+                return "default", channel_name[len("default_"):]
         
         # If no pattern matches, return the whole string as device name with empty remaining part
         return channel_name, ""
@@ -420,43 +457,69 @@ class ScanLogic(QtCore.QThread):
         end_time = time.time()
         return combined_results
 
+    def build_nan_measurements(self, device_channels):
+        skipped_measurements = {}
+        for device, channel_list in device_channels.items():
+            for channel in channel_list:
+                skipped_measurements[f"{device}_{channel}"] = np.nan
+        return skipped_measurements
 
     def read_single_device_all_channels(self, device, channel_list):
         result = {}
         start_time = time.time()
         for channel in channel_list:
-            if channel in self.main_window.equations:
-                result[f"{device}_{channel}"] = self.main_window.read_artificial_channel(channel)
+            if self.main_window.artificial_channel_logic.has_artificial_channel(channel):
+                result[f"{device}_{channel}"] = self.main_window.artificial_channel_logic.read_channel_value(channel)
             else:
                 result[f"{device}_{channel}"] = self.main_window.read_info(f"{device}_{channel}")
         end_time = time.time()
         return result
 
-    def group_writing_device_channels(self, level_index):
-        device_channels = {}
-        for setter_index in range(len(self.level_setters[level_index])):
-            setter_channel = self.level_setters[level_index][setter_index]
-            device_name, variable = self.extract_device_from_channel(setter_channel)
-            if device_name not in device_channels:
-                device_channels[device_name] = {}
-            device_channels[device_name][variable] = 0
-        return device_channels
-
     def write_single_device_all_channels(self, device, channel_value_list):
         for channel, value in channel_value_list.items():
-            if channel in self.main_window.equations:
-                self.main_window.write_artificial_channel(value, channel)
+            if self.main_window.artificial_channel_logic.has_artificial_channel(channel):
+                self.main_window.artificial_channel_logic.set_channel_value(
+                    channel,
+                    value,
+                    is_scan_write=True,
+                )
             else:
                 self.main_window.write_info(value, f"{device}_{channel}")
 
-    def multi_thread_write(self, writing_device_channels, level_index, target_index):
+    def _build_write_payload(self, level_index, target_index):
+        """
+        Build one write payload for a scan point.
+
+        Duplicate setter channels are resolved by setter order:
+        first active setter wins for the same channel at this point.
+        """
         set_value = self.level_target_arrays[level_index][:, target_index]
-        print("writing_device_channels.items(): ",writing_device_channels.items())
-        for device, channel_list in writing_device_channels.items():
-            print("channel_list:", channel_list)
-            for channel in channel_list:
-                channel_list_index = self.level_setters[level_index].index(f"{device}_{channel}")
-                writing_device_channels[device][channel] = set_value[channel_list_index]
+        device_channels = {}
+
+        for setter_index, setter_channel in enumerate(self.level_setters[level_index]):
+            value = set_value[setter_index]
+            if np.isnan(value):
+                continue
+
+            device_name, variable = self.extract_device_from_channel(setter_channel)
+            if device_name in (None, "", "none"):
+                continue
+
+            if device_name not in device_channels:
+                device_channels[device_name] = {}
+
+            # First active setter wins if same channel appears more than once.
+            if variable in device_channels[device_name]:
+                continue
+            device_channels[device_name][variable] = value
+
+        return device_channels
+
+    def multi_thread_write(self, level_index, target_index):
+        writing_device_channels = self._build_write_payload(level_index, target_index)
+        if len(writing_device_channels) == 0:
+            return
+
         with ThreadPoolExecutor(max_workers=len(writing_device_channels)) as executor:
             futures = [executor.submit(self.write_single_device_all_channels, device, channel_value_list) for device, channel_value_list in writing_device_channels.items()]
 
@@ -497,10 +560,12 @@ class ScanLogic(QtCore.QThread):
         """
         try:
             # Start recursive scanning from the outermost level
+            self.main_window.artificial_channel_logic.reset_skip_next_scan_read()
             self.looping(self.max_level)
         finally:
             # Ensure proper cleanup regardless of how scan ends
             self.reset_flags()
+            self.main_window.artificial_channel_logic.reset_skip_next_scan_read()
             print("scan finished here")
             
             # Re-enable equipment that was stopped for scanning
@@ -522,6 +587,18 @@ class ScanLogic(QtCore.QThread):
 
         # Reset flags when thread execution completes
         self.reset_flags()
+
+    def check_auto_backup_trigger(self):
+        """
+        Trigger auto-backup once when crossing each elapsed whole-hour mark.
+        """
+        if self.scan_start_time is None:
+            return
+
+        elapsed_hours = int((time.time() - self.scan_start_time) // 3600)
+        if elapsed_hours >= 1 and elapsed_hours > self.last_auto_hour_triggered:
+            self.last_auto_hour_triggered = elapsed_hours
+            self.sig_auto_backup.emit(True)
 
     def update_remaining_time_estimate(self):
         """
@@ -552,7 +629,6 @@ class ScanLogic(QtCore.QThread):
         # Emit signals for GUI updates
         self.sig_update_remaining_time.emit(remaining_time_str)
         self.sig_update_remaining_points.emit(remaining_points_str)
-
 
 # Test/demo code for standalone execution
 if __name__ == "__main__":

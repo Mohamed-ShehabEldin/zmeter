@@ -1,22 +1,24 @@
-from PyQt6 import QtWidgets, uic, QtCore
+from PyQt6 import QtWidgets, uic
+import os
 import sys
-from keithley24xx.keithley24xx_logic import Keithley24xxLogic
-import numpy as np
-import pyqtgraph as pg
 import pyvisa
 import time
+
+try:
+    from .keithley24xx_logic import Keithley24xxLogic
+except ImportError:
+    from keithley24xx.keithley24xx_logic import Keithley24xxLogic
 
 
 class Keithley24xx(QtWidgets.QWidget):
     def __init__(self):
         super(Keithley24xx, self).__init__()
-        uic.loadUi("keithley24xx/keithley24xx.ui", self)
+        ui_path = os.path.join(os.path.dirname(__file__), "keithley24xx.ui")
+        uic.loadUi(ui_path, self)
         self.logic = Keithley24xxLogic()
         self.connect_sig_slot()
         self.is_connected = False
-        resource_manager = pyvisa.ResourceManager()
-        ls = resource_manager.list_resources()
-        self.address_cb.addItems(ls)
+        self._refresh_visa_resources()
         self.ramp_rate_label.setText(
             f"Current ramp rate: {self.logic.ramp_rate:.2e} V/s"
         )
@@ -45,6 +47,16 @@ class Keithley24xx(QtWidgets.QWidget):
         self.logic.sig_new_read.connect(self.update_read)
         self.logic.sig_on_off.connect(self.on_off_label)
 
+    def _refresh_visa_resources(self):
+        try:
+            resource_manager = pyvisa.ResourceManager()
+            resources = resource_manager.list_resources()
+        except Exception as exc:
+            resources = ()
+            print(f"Could not list Keithley VISA resources: {exc}")
+        self.address_cb.clear()
+        self.address_cb.addItems(resources)
+
     def force_stop(self):
         self.logic.force_stop = True
 
@@ -61,12 +73,16 @@ class Keithley24xx(QtWidgets.QWidget):
         self.logic.volt_ramp_step = val / self.logic.points_per_sec
 
     def update_sour_func(self, t):
+        if not self.is_connected:
+            return
         if t == "volt":
             self.logic.sour_func_to_volt()
         if t == "curr":
             self.logic.sour_func_to_curr()
 
     def update_sens_func(self, t):
+        if not self.is_connected:
+            return
         if t == "volt":
             self.logic.sens_func_to_volt()
         if t == "curr":

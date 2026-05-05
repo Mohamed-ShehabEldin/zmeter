@@ -1,6 +1,6 @@
 from PyQt6 import QtWidgets, QtCore, uic  # type: ignore
+import os
 import sys
-import time
 from typing import Any
 import numpy as np
 import pyqtgraph as pg
@@ -26,7 +26,8 @@ class HP34401A(QtWidgets.QWidget):
         super().__init__()
 
         # ---------------- load UI from external .ui file ---------------
-        uic.loadUi("hp34401a/hp34401a.ui", self)
+        ui_path = os.path.join(os.path.dirname(__file__), "hp34401a.ui")
+        uic.loadUi(ui_path, self)
 
         # ----- helper plot widget (X, Y, R, Theta streams) -----
         w = pg.GraphicsLayoutWidget(show=True)
@@ -36,10 +37,6 @@ class HP34401A(QtWidgets.QWidget):
 
         # *graph_dc_voltage* is a QVBoxLayout placeholder defined in the .ui file
         self.graph_dc_voltage.addWidget(w)
-
-        # ----- VISA resource list -----
-        resource_manager = pyvisa.ResourceManager()
-        self.address_comboBox.addItems(resource_manager.list_resources())
 
         # ---------------- logic layer -------------
         self.logic = HP34401A_Logic()
@@ -182,8 +179,12 @@ class HP34401A(QtWidgets.QWidget):
     # Helper methods
     # -------------------------------------------------------------
     def _refresh_visa_resources(self):
-        rm = pyvisa.ResourceManager()
-        resources = rm.list_resources()
+        try:
+            rm = pyvisa.ResourceManager()
+            resources = rm.list_resources()
+        except Exception as exc:
+            resources = ()
+            self._update_status(f"[WARN] Could not list VISA resources: {exc}")
         self.address_comboBox.clear()  # type: ignore[attr-defined]
         self.address_comboBox.addItems(resources)  # type: ignore[attr-defined]
 

@@ -41,7 +41,7 @@ class NIDAQLogic(QtCore.QThread):
             "AO3": 0.0,
         }  # used for coupled channels like rotator
 
-        self.AI_channels = ["AI0", "AI1", "AI2", "AI3"]
+        self.AI_channels = ["AI0", "AI1", "AI2", "AI3", "AI4", "AI5", "AI6", "AI7"]
         for ch in self.AI_channels:
             ch = "/" + self.dev_name + "/" + ch
             self.daq.setup_single_AI_task(ch)
@@ -149,31 +149,43 @@ class NIDAQLogic(QtCore.QThread):
     def get_AI6(self):
         return self.read_AI("AI6")
 
+    def get_AI7(self):
+        return self.read_AI("AI7")
+
+    def get_count(self):
+        return self.get_sample_count()
+
     def assign_next_AI_channel(self, channel):
         self.next_AI_channel = channel
 
     #####################################################
     def run(self):
-        if self.job == "write_AO0":
-            self.set_AO0(self.target_AO0)
+        if not self.is_initialized:
+            self.job = ""
+            return
 
-        elif self.job == "write_AO1":
-            self.set_AO1(self.target_AO1)
+        try:
+            if self.job == "write_AO0":
+                self.set_AO0(self.target_AO["AO0"])
 
-        elif self.job == "read_AI":
-            self.read_AI(self.next_AI_channel)
+            elif self.job == "write_AO1":
+                self.set_AO1(self.target_AO["AO1"])
 
-        elif self.job == "read_single_sample_count":
-            self.get_sample_count()
+            elif self.job == "read_AI":
+                self.read_AI(self.next_AI_channel)
 
-        elif self.job == "write_AO":
-            self.setup_AO(self.next_channel, self.target_AO[self.next_channel])
+            elif self.job == "read_single_sample_count":
+                self.get_sample_count()
 
-        elif self.job == "pulse":
-            self.emit_pulse()
+            elif self.job == "write_AO":
+                self.setup_AO(self.next_channel, self.target_AO[self.next_channel])
 
-        self.reset_flags()
-        self.job = ""
+            elif self.job == "pulse":
+                self.emit_pulse()
+
+        finally:
+            self.reset_flags()
+            self.job = ""
 
 
 if __name__ == "__main__":

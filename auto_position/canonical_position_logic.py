@@ -2,10 +2,10 @@
 import numpy as np
 from pathlib import Path
 from scipy.io import loadmat, savemat
-from scipy.ndimage import shift as ndi_shift
+from scipy.ndimage import gaussian_filter
+from scipy.signal import medfilt
 from skimage.registration import phase_cross_correlation
 import matplotlib.pyplot as plt
-from nidaq_hardware import NIDAQHardWare
 
 # ─── USER PARAMETERS ───────────────────────────────────────────────────────────
 GALVO_X    = '/Dev1/AO0'    # DAQ analog‑out channel for X
@@ -27,6 +27,10 @@ Y0         = 0.80           # user‑defined target voltage Y
 # Other settings
 RESULTS_DIR = 'position_dataa'  # folder for .mat and .png output
 UPSAMPLE    = 10               # subpixel accuracy factor in registration
+KERNEL_SIZE = 3
+SIGMA       = 1.0
+CUT         = 1
+USE_ABS_FOR_REGISTRATION = True
 # ────────────────────────────────────────────────────────────────────────────────
 
 class AutoPositionSystem:
@@ -35,10 +39,29 @@ class AutoPositionSystem:
                  pd_in="/Dev1/AI0"):
         
         self.daq = daq
-        self.daq.set_up_single_ao_task(GALVO_X)
-        self.daq.set_up_single_ao_task(GALVO_Y)
-        self.daq.set_up_single_ai_task(PD_IN)
-        self.ao_x, self.ao_y, self.ai = GALVO_X, GALVO_Y, PD_IN
+        self.daq.set_up_single_ao_task(galvo_x)
+        self.daq.set_up_single_ao_task(galvo_y)
+        self.daq.set_up_single_ai_task(pd_in)
+        self.ao_x, self.ao_y, self.ai = galvo_x, galvo_y, pd_in
+
+    def process_data(self, data: np.ndarray) -> np.ndarray:
+        processed = np.asarray(data, dtype=float)
+
+        kernel_size = int(KERNEL_SIZE)
+        if kernel_size > 1:
+            if kernel_size % 2 == 0:
+                kernel_size += 1
+            processed = medfilt(processed, kernel_size=kernel_size)
+
+        sigma = float(SIGMA)
+        if sigma > 0:
+            processed = gaussian_filter(processed, sigma=sigma)
+
+        cut = max(int(CUT), 0)
+        if cut > 0 and processed.shape[0] > 2 * cut and processed.shape[1] > 2 * cut:
+            processed = processed[cut:-cut, cut:-cut]
+
+        return processed
 
     def measure_map(self, x_center, y_center):
         xs = np.linspace(x_center - X_RANGE/2, x_center + X_RANGE/2, X_PTS) #### CONSIDER DEVIDING RANGE BY 2
@@ -49,7 +72,7 @@ class AutoPositionSystem:
             for j, yv in enumerate(ys):
                 self.daq.write_single_ao_task(self.ao_y, float(yv))
                 M[j, i] = self.daq.read_single_ai_task(self.ai)
-        return M
+        return self.process_data(M)
 
     def compute_shift(self, prev_map: np.ndarray, new_map: np.ndarray):
         """
@@ -57,9 +80,12 @@ class AutoPositionSystem:
         phase correlation, convert to AO volts, and invert sign.
         Returns (dx_volts, dy_volts).
         """
+        previous = np.abs(prev_map) if USE_ABS_FOR_REGISTRATION else prev_map
+        current = np.abs(new_map) if USE_ABS_FOR_REGISTRATION else new_map
+
         (dy_pix, dx_pix), error, _ = phase_cross_correlation(
-            prev_map,
-            new_map,
+            previous,
+            current,
             upsample_factor=UPSAMPLE
         )
         # pixel → volts conversion
@@ -70,7 +96,7 @@ class AutoPositionSystem:
 
 
 def auto_positon(ap: AutoPositionSystem, save_dir: str = None):
-    out = Path(save_dir)
+    out = Path(save_dir or RESULTS_DIR)
     out.mkdir(parents=True, exist_ok=True)
 
         # look for existing scans
@@ -134,12 +160,33 @@ def auto_positon(ap: AutoPositionSystem, save_dir: str = None):
     fig.colorbar(im, ax=ax, label='AI0 (V)')
     path = out / f'{run_idx}.png'
     fig.savefig(str(path), dpi=150)
+    plt.close(fig)
     print(f"Saved plot to {path}")
+
+    return {
+        "run_idx": run_idx,
+        "x_center": x_ctr,
+        "y_center": y_ctr,
+        "x0": x0,
+        "y0": y0,
+        "x_shift": shift_x,
+        "y_shift": shift_y,
+        "map_path": str(path),
+        "mat_path": str(out / f'{run_idx}.mat'),
+    }
+
+
+def auto_position(ap: AutoPositionSystem, save_dir: str = None):
+    return auto_positon(ap, save_dir=save_dir)
+
+
 # ────────────────────────────────────────────────────────────────────────────────
 def main():
+    from nidaq.nidaq_hardware import NIDAQHardWare
+
     daq= NIDAQHardWare()
     ap = AutoPositionSystem(daq)
     print("Starting autopositioning…")
-    auto_positon(ap,save_dir=RESULTS_DIR)
+    auto_position(ap,save_dir=RESULTS_DIR)
 if __name__ == '__main__':
     main()

@@ -237,11 +237,11 @@ class TLPM_Hardware:
 
     def __init__(self):
         if sizeof(c_voidp) == 4:
-            self.dll = cdll.LoadLibrary("TLPM_32.dll")
+            self.dll = cdll.LoadLibrary(os.path.join(os.path.dirname(__file__), "TLPM_32.dll"))
         else:
             #     self.dll = cdll.LoadLibrary(r"C:\Users\QM\Desktop\test\Python\TLPM_64.dll")
         #     self.dll = cdll.LoadLibrary(r"C:\Program Files\IVI Foundation\VISA\Win64\Bin\TLPM_64.dll")
-            self.dll = cdll.LoadLibrary(r"tlpm\TLPM_64.dll")
+            self.dll = cdll.LoadLibrary(os.path.join(os.path.dirname(__file__), "TLPM_64.dll"))
             
 
         self.devSession = c_long()

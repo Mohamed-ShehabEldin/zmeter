@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>796</width>
-    <height>727</height>
+    <width>1200</width>
+    <height>675</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -72,8 +72,8 @@
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>723</width>
-            <height>607</height>
+            <width>1127</width>
+            <height>515</height>
            </rect>
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_4"/>
@@ -108,62 +108,6 @@
        </item>
        <item>
         <layout class="QGridLayout" name="gridLayout_2">
-         <item row="1" column="0">
-          <widget class="QLabel" name="label_2">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="font">
-            <font>
-             <pointsize>8</pointsize>
-            </font>
-           </property>
-           <property name="text">
-            <string>Name</string>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="0">
-          <widget class="QPlainTextEdit" name="filename_textEdit">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="maximumSize">
-            <size>
-             <width>16777215</width>
-             <height>28</height>
-            </size>
-           </property>
-          </widget>
-         </item>
-         <item row="6" column="0" rowspan="2">
-          <widget class="QPlainTextEdit" name="comments_textEdit">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-          </widget>
-         </item>
-         <item row="4" column="0">
-          <widget class="QLabel" name="label_6">
-           <property name="font">
-            <font>
-             <pointsize>8</pointsize>
-            </font>
-           </property>
-           <property name="text">
-            <string>Comments</string>
-           </property>
-          </widget>
-         </item>
          <item row="4" column="2">
           <widget class="QComboBox" name="PlotsPerPage">
            <property name="sizePolicy">
@@ -324,6 +268,28 @@
            </property>
           </widget>
          </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="label_6">
+           <property name="font">
+            <font>
+             <pointsize>8</pointsize>
+            </font>
+           </property>
+           <property name="text">
+            <string>Comments</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0" rowspan="6">
+          <widget class="QPlainTextEdit" name="comments_textEdit">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+          </widget>
+         </item>
         </layout>
        </item>
       </layout>
@@ -346,7 +312,7 @@
           <enum>Qt::Vertical</enum>
          </property>
          <property name="sizeType">
-          <enum>QSizePolicy::MinimumExpanding</enum>
+          <enum>QSizePolicy::Expanding</enum>
          </property>
          <property name="sizeHint" stdset="0">
           <size>
@@ -385,32 +351,46 @@
         </layout>
        </item>
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_3">
-         <item>
+        <layout class="QGridLayout" name="gridLayout_plot1">
+         <item row="2" column="1">
+          <widget class="QPushButton" name="resume_button_1">
+           <property name="text">
+            <string>Resume</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="0">
           <widget class="QPushButton" name="scan_button_1">
            <property name="text">
             <string>Scan</string>
            </property>
           </widget>
          </item>
-         <item>
-          <widget class="QPushButton" name="stop_button_1">
+         <item row="0" column="2">
+          <widget class="QPushButton" name="update_plots_button_1">
            <property name="text">
-            <string>Stop</string>
+            <string>Update Plots</string>
            </property>
           </widget>
          </item>
-         <item>
+         <item row="2" column="2">
           <widget class="QPushButton" name="save_plots_button_1">
            <property name="text">
             <string>Save plots</string>
            </property>
           </widget>
          </item>
-         <item>
-          <widget class="QPushButton" name="update_plots_button_1">
+         <item row="0" column="1">
+          <widget class="QPushButton" name="stop_button_1">
            <property name="text">
-            <string>Update Plots</string>
+            <string>Stop</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QPushButton" name="pause_button_1">
+           <property name="text">
+            <string>Pause</string>
            </property>
           </widget>
          </item>
@@ -475,32 +455,46 @@
         </layout>
        </item>
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_4">
-         <item>
+        <layout class="QGridLayout" name="gridLayout_plot2">
+         <item row="0" column="0">
           <widget class="QPushButton" name="scan_button_2">
            <property name="text">
             <string>Scan</string>
            </property>
           </widget>
          </item>
-         <item>
+         <item row="0" column="1">
           <widget class="QPushButton" name="stop_button_2">
            <property name="text">
             <string>Stop</string>
            </property>
           </widget>
          </item>
-         <item>
-          <widget class="QPushButton" name="save_plots_button_2">
-           <property name="text">
-            <string>Save plots</string>
-           </property>
-          </widget>
-         </item>
-         <item>
+         <item row="0" column="2">
           <widget class="QPushButton" name="update_plots_button_2">
            <property name="text">
             <string>Update Plots</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QPushButton" name="pause_button_2">
+           <property name="text">
+            <string>Pause</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QPushButton" name="resume_button_2">
+           <property name="text">
+            <string>Resume</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="2">
+          <widget class="QPushButton" name="save_plots_button_2">
+           <property name="text">
+            <string>Save plots</string>
            </property>
           </widget>
          </item>
@@ -565,32 +559,46 @@
         </layout>
        </item>
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_5">
-         <item>
+        <layout class="QGridLayout" name="gridLayout_plot3">
+         <item row="0" column="0">
           <widget class="QPushButton" name="scan_button_3">
            <property name="text">
             <string>Scan</string>
            </property>
           </widget>
          </item>
-         <item>
+         <item row="0" column="1">
           <widget class="QPushButton" name="stop_button_3">
            <property name="text">
             <string>Stop</string>
            </property>
           </widget>
          </item>
-         <item>
-          <widget class="QPushButton" name="save_plots_button_3">
-           <property name="text">
-            <string>Save plots</string>
-           </property>
-          </widget>
-         </item>
-         <item>
+         <item row="0" column="2">
           <widget class="QPushButton" name="update_plots_button_3">
            <property name="text">
             <string>Update Plots</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QPushButton" name="pause_button_3">
+           <property name="text">
+            <string>Pause</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QPushButton" name="resume_button_3">
+           <property name="text">
+            <string>Resume</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="2">
+          <widget class="QPushButton" name="save_plots_button_3">
+           <property name="text">
+            <string>Save plots</string>
            </property>
           </widget>
          </item>

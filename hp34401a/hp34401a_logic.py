@@ -119,6 +119,14 @@ class HP34401A_Logic(QtCore.QThread):
             self._logger.error(f"Error measuring DC voltage: {e}")
             raise
 
+    def get_voltage(self) -> float:
+        """Scan-friendly alias for the DC voltage channel."""
+        return self.get_dc_voltage()
+
+    def get_nplc(self) -> float:
+        """Scan-friendly getter for the DC voltage integration time."""
+        return self.read_NPLC()
+
     def read_NPLC(self) -> float:
         """ Returns current NPLC value """
         if not self._hardware:
@@ -132,6 +140,16 @@ class HP34401A_Logic(QtCore.QThread):
             raise
 
     # -------------- setter wrappers -----------------
+
+    def set_nplc(self, val: float) -> None:
+        """Scan-friendly setter for the DC voltage integration time."""
+        self.setpoint_NPLC = float(val)
+        self.write_NPLC()
+
+    def set_display_on(self, val: bool | float | int) -> None:
+        """Scan-friendly setter for the front-panel display state."""
+        self.setpoint_display_on = bool(val)
+        self.write_display_on()
 
     def write_NPLC(self) -> None:
         #assert self._hardware is not None

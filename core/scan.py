@@ -1,3 +1,4 @@
+import datetime as _dt
 from .scan_info import *
 from .scan_logic_new import ScanLogic
 from .all_level import AllLevelSetting
@@ -25,6 +26,7 @@ class Scan(QtWidgets.QWidget):
         self.logic.sig_new_data.connect(self.new_data)
         self.logic.sig_update_remaining_time.connect(self.update_remaining_time_label)
         self.logic.sig_update_remaining_points.connect(self.update_remaining_points_label)
+        self.logic.sig_auto_backup.connect(self.auto_backup)
 
         
         self.main_window=main_window
@@ -32,23 +34,34 @@ class Scan(QtWidgets.QWidget):
         self.setter_equipment_info = setter_equipment_info
         self.getter_equipment_info = getter_equipment_info
 
+        self._start_new_scan_after_stop = False
+
         self.scan_button.clicked.connect(self.when_scan_clicked)
         self.stop_button.clicked.connect(self.when_stop_clicked)
+        self.load_button.clicked.connect(self.when_load_clicked)
+        self.save_button.clicked.connect(self.when_save_clicked)
+
         self.scan_button_1.clicked.connect(self.when_scan_clicked)
         self.stop_button_1.clicked.connect(self.when_stop_clicked)
+        self.pause_button_1.clicked.connect(self.when_pause_clicked)
+        self.resume_button_1.clicked.connect(self.when_resume_clicked)
         self.save_plots_button_1.clicked.connect(self.when_save_plots_clicked)
         self.update_plots_button_1.clicked.connect(self.update_all_plots)
+
         self.scan_button_2.clicked.connect(self.when_scan_clicked)
         self.stop_button_2.clicked.connect(self.when_stop_clicked)
+        self.pause_button_2.clicked.connect(self.when_pause_clicked)
+        self.resume_button_2.clicked.connect(self.when_resume_clicked)
         self.save_plots_button_2.clicked.connect(self.when_save_plots_clicked)
         self.update_plots_button_2.clicked.connect(self.update_all_plots)
+
         self.scan_button_3.clicked.connect(self.when_scan_clicked)
         self.stop_button_3.clicked.connect(self.when_stop_clicked)
+        self.pause_button_3.clicked.connect(self.when_pause_clicked)
+        self.resume_button_3.clicked.connect(self.when_resume_clicked)
         self.save_plots_button_3.clicked.connect(self.when_save_plots_clicked)
         self.update_plots_button_3.clicked.connect(self.update_all_plots)
 
-        self.load_button.clicked.connect(self.when_load_clicked)
-        self.save_button.clicked.connect(self.when_save_clicked)
         self.all_level_setting = AllLevelSetting(all_level_info=info['levels'],setter_equipment_info=setter_equipment_info,getter_equipment_info=getter_equipment_info)
         # print(equipment_info)
         self.all_plot_setting = AllPlotSetting(level_info=info['levels'])
@@ -60,16 +73,19 @@ class Scan(QtWidgets.QWidget):
         self.plots1_layout.addWidget(self.graphing_plots[0])
         self.plots2_layout.addWidget(self.graphing_plots[1])
         self.plots3_layout.addWidget(self.graphing_plots[2])
+        self._configure_plot_tab_stretch()
 
         self.scrollArea.setWidget(self.all_level_setting)
         if info is None:
             self.info = {'name': 'no name',
                          'levels': self.all_level_setting.all_level_info,
                          'data': {},
-                         'plots': self.all_plot_setting.info}
+                         'plots': self.all_plot_setting.info,
+                         'comments': ''}
         else:
             self.info = info
             self.info['name']=name
+            self.info.setdefault('comments', '')
             # print(name)
         self.populate()
         self.all_level_setting.sig_info_changed.connect(self.when_all_level_setting_infochanged)
@@ -80,37 +96,68 @@ class Scan(QtWidgets.QWidget):
         self.logic.sig_scan_finished.connect(self.scan_finished)
 
     def when_save_plots_clicked(self):  # Mohamed Change: April 2025
-        import datetime as _dt
-
-        # Capture screenshots
-        screenshot1 = self.settingTab.grab()
-        screenshot2 = self.Plots1Tab.grab()
-        screenshot3 = self.main_window.grab()
-
-        # PowerPoint path from UI
-        ppt_path = self.main_window.ppt_path.toPlainText().strip()
-
-        # Make title = saved filename (matches JSON naming logic)
         base = self._next_unique_data_name()
-        slide_title = f"{base}.json"
+        ppt_text = self.main_window.ppt_path.toPlainText().strip()
 
-        # Make slide text = date and time
-        slide_text = _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if ppt_text == "":
+            file_name, _ = QFileDialog.getSaveFileName(
+                self, "Select PPT", f"{base}.pptx", "PPT Files (*.pptx)"
+            )
+            if not file_name:
+                return
+        else:
+            file_name = os.path.normpath(ppt_text.strip('"'))
 
-        image_positions = [
-                            (10, 75, 550, 450),
-                            (555, 155, 450, 400),
-                            (650, 5, 200, 150)
-                            ]
+        if not file_name.lower().endswith(".pptx"):
+            file_name = f"{file_name}.pptx"
+
+        folder = os.path.dirname(file_name)
+        if folder and not os.path.exists(folder):
+            os.makedirs(folder, exist_ok=True)
+
+        comments_text = self.comments_textEdit.toPlainText().strip()
+        save_time = _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # First slide: always save settings + main window overview.
+        overview_title = f"{base}.json - Settings and Main Window"
+        overview_text = f"Saved: {save_time}"
+        setting_shot = self.settingTab.grab()
+        main_window_shot = self.main_window.grab()
+        overview_positions = [
+            (20, 70, 450, 380),   # settingTab
+            (490, 70, 450, 380),  # main_window
+        ]
 
         add_slide_with_qpixmap(
-            ppt_path=ppt_path,
-            slide_title=slide_title,
-            slide_text=slide_text,
-            pixmap_images=[screenshot2, screenshot1, screenshot3],
-            image_positions=image_positions
+            ppt_path=file_name,
+            slide_title=overview_title,
+            slide_text=overview_text,
+            pixmap_images=[setting_shot, main_window_shot],
+            image_positions=overview_positions,
+            comments_text=comments_text,
         )
-        print("UI screenshot captured and saved.")
+
+        non_empty_tabs = []
+        for tab_index, tab in enumerate([self.Plots1Tab, self.Plots2Tab, self.Plots3Tab], start=1):
+            if tab.findChildren((LinePlot, ImagePlot)):
+                non_empty_tabs.append((tab_index, tab))
+
+        for tab_index, tab in non_empty_tabs:
+            slide_title = f"{base}.json - Plots Tab {tab_index}"
+            slide_text = f"Saved: {save_time}"
+            screenshot = tab.grab()
+
+            add_slide_with_qpixmap(
+                ppt_path=file_name,
+                slide_title=slide_title,
+                slide_text=slide_text,
+                pixmap_images=[screenshot],
+                image_positions=[(20, 70, 920, 450)],
+            )
+
+        print(
+            f"Saved 1 overview slide and {len(non_empty_tabs)} plot slide(s) to {file_name}"
+        )
 
 
     def scan_finished(self):
@@ -118,15 +165,39 @@ class Scan(QtWidgets.QWidget):
         self.when_save_plots_clicked()
         self.when_save_clicked()
         current_serial = self.main_window.scanlist.serial.value()
-        self.main_window.scanlist.serial.setValue(current_serial+1)
+        self.main_window.scanlist.serial.setValue(current_serial + 1)
+
+        # If user clicked "Scan" while paused, we queued a fresh scan start
+        if getattr(self, "_start_new_scan_after_stop", False):
+            self._start_new_scan_after_stop = False
+            self._start_scan_now()
 
     def set_setter_equipment_info(self,info):
         self.setter_equipment_info=info
         self.all_level_setting.set_setter_equipment_info(self.setter_equipment_info)
 
+    def set_getter_equipment_info(self, info):
+        self.getter_equipment_info = info
+        self.all_level_setting.set_getter_equipment_info(self.getter_equipment_info)
+
     def populate(self):
         self.lineEdit.setText(self.info['name'])
+        self.comments_textEdit.setPlainText(self.info.get('comments', ''))
         self.setWindowTitle(self.info['name'])
+
+    def _configure_plot_tab_stretch(self):
+        """
+        Keep the plot region as the vertical stretch owner in each tab.
+        This avoids the spacer row consuming extra height when only one plot exists.
+        """
+        for tab in [self.Plots1Tab, self.Plots2Tab, self.Plots3Tab]:
+            layout = tab.layout()
+            if layout is None:
+                continue
+            # Reset first, then assign stretch to the plot container row (index 0).
+            for i in range(layout.count()):
+                layout.setStretch(i, 0)
+            layout.setStretch(0, 1)
 
     def emit(self):
         self.sig_info_changed.emit(self.info)
@@ -184,22 +255,77 @@ class Scan(QtWidgets.QWidget):
         self.main_window = mainwindow
         self.logic.main_window = mainwindow
 
-    def when_stop_clicked(self):
-        self.main_window.force_stop_equipments()
-        self.logic.received_stop = True
-        self.logic.stop_scan = True
-
-    def when_scan_clicked(self):
+    def _start_scan_now(self):
+        """Start a fresh scan using current self.info settings."""
         if hasattr(self, "unique_data_name"):
             del self.unique_data_name
+
         self.main_window.stop_equipments_for_scanning()
         self.logic.reset_flags()
         self.logic.go_scan = True
+
         self.update_alllevel_setting_array()
         self.logic.initialize_scan_data(self.info)
-        # self.logic.initilize_data(self.info)        #for old version
+
         self.update_all_plots()
         self.logic.start()
+
+    def _request_logic_stop(self):
+        """Request a clean stop from ScanLogic, including paused state."""
+        self.main_window.force_stop_equipments()
+
+        if hasattr(self.logic, "request_stop"):
+            self.logic.request_stop()
+        else:
+            self.logic.received_stop = True
+            if hasattr(self.logic, "received_pause"):
+                self.logic.received_pause = False
+
+        self.logic.stop_scan = True
+
+    def when_stop_clicked(self):
+        self._start_new_scan_after_stop = False
+
+        # Do nothing when no scan thread is active; this avoids accidental save flows.
+        if not self.logic.isRunning():
+            return
+
+        self._request_logic_stop()
+
+    def when_scan_clicked(self):
+        # If a scan is already running (paused or not), stop it first.
+        # scan_finished() will save current data, then we start a fresh scan.
+        if self.logic.isRunning():
+            self._request_logic_stop()
+            self._start_new_scan_after_stop = True
+            return
+
+        self._start_new_scan_after_stop = False
+        self._start_scan_now()
+
+    def when_pause_clicked(self):
+        """Pause the running scan thread (no-op if not running)."""
+        if not self.logic.isRunning():
+            return
+
+        # Preferred: use ScanLogic pause API if you added it
+        if hasattr(self.logic, "request_pause"):
+            self.logic.request_pause()
+        else:
+            # Fallback: direct flag
+            self.logic.received_pause = True
+
+    def when_resume_clicked(self):
+        """Resume a paused scan (no-op if not running)."""
+        if not self.logic.isRunning():
+            return
+
+        if hasattr(self.logic, "request_resume"):
+            self.logic.request_resume()
+        else:
+            self.logic.received_pause = False
+            # If you used a QWaitCondition in ScanLogic, you'd also need wakeAll()
+            # but without that infrastructure, this fallback only works if your loop polls the flag.
 
     def start_scan(self):
         if hasattr(self, "unique_data_name"):
@@ -220,6 +346,8 @@ class Scan(QtWidgets.QWidget):
         """Call AllPlots.update_plots() for every page."""
         self.update_alllevel_setting_array()
         for gp in self.graphing_plots:
+
+            
             gp.update_plots()
 
     def new_data(self,info):
@@ -462,6 +590,10 @@ class Scan(QtWidgets.QWidget):
                     return "NaN"
                 return super().default(obj)
 
+        # Sync UI-only level editor fields (for example setting_method_le) into self.info.
+        self.update_alllevel_setting_array()
+        self.info['comments'] = self.comments_textEdit.toPlainText()
+
         ppp_box = self.PlotsPerPage                      # QComboBox
         self.info['plots_per_page'] = ppp_box.currentText()
 
@@ -537,6 +669,7 @@ class Scan(QtWidgets.QWidget):
                     
                     info = json.loads(content)  # Use json.loads() instead of json.load(file)
                     self.info = convert_special_values(info)
+                    self.info.setdefault('comments', '')
                     print("info",self.info)
 
                     ppp_val = self.info.get('plots_per_page', None)
@@ -572,6 +705,7 @@ class Scan(QtWidgets.QWidget):
         self.plots1_layout.addWidget(self.graphing_plots[0])
         self.plots2_layout.addWidget(self.graphing_plots[1])
         self.plots3_layout.addWidget(self.graphing_plots[2])
+        self._configure_plot_tab_stretch()
 
         self.populate()
         self.all_level_setting.sig_info_changed.connect(self.when_all_level_setting_infochanged)
@@ -605,6 +739,10 @@ class Scan(QtWidgets.QWidget):
         print(setter_equipment_info)
         self.setter_equipment_info=setter_equipment_info
         self.all_level_setting.set_setter_equipment_info(self.setter_equipment_info)
+
+    def when_getter_equipment_info_change(self, getter_equipment_info):
+        self.getter_equipment_info = getter_equipment_info
+        self.all_level_setting.set_getter_equipment_info(self.getter_equipment_info)
 
     def scan_setters(self):
         destination=self.destinations[self.current_destinations_index]
@@ -640,8 +778,42 @@ class Scan(QtWidgets.QWidget):
         self.ui.scan_point_info_2.setText(f"Finished / Total Points: {point_str}")
         self.ui.scan_point_info_3.setText(f"Finished / Total Points: {point_str}")
     
+    def auto_backup(self, trigger: bool):
+        """Handle auto-backup signal from ScanLogic."""
+        if not trigger:
+            return
+            
+        class CustomEncoder(json.JSONEncoder):
+            def default(self, obj):
+                if isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                elif isinstance(obj, float) and np.isnan(obj):
+                    return "NaN"
+                return super().default(obj)
 
+        self.info['comments'] = self.comments_textEdit.toPlainText()
 
+        ppp_box = self.PlotsPerPage                      # QComboBox
+        self.info['plots_per_page'] = ppp_box.currentText()
+
+        # Same data folder as normal save flow; always overwrite autosave.json.
+        text = self.main_window.save_info_path.toPlainText().strip()
+        if text:
+            folder = os.path.normpath(text.strip('"'))
+        elif hasattr(self.main_window, "save_path"):
+            folder = os.path.normpath(str(self.main_window.save_path))
+        else:
+            folder = os.getcwd()
+
+        os.makedirs(folder, exist_ok=True)
+        fileName = os.path.join(folder, "autosave.json")
+
+        try:
+            with open(fileName, 'w') as json_file:
+                json.dump(self.info, json_file, cls=CustomEncoder, indent=4)
+            print(f"Autosave updated: {fileName}")
+        except Exception as e:
+            print(f"Autosave failed: {e}")
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)

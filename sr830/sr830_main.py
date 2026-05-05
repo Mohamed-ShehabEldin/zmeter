@@ -1,3 +1,4 @@
+import os
 import time
 from PyQt6 import QtWidgets, uic, QtCore
 import sys
@@ -12,11 +13,16 @@ class SR830(QtWidgets.QWidget):
     start_signal = QtCore.pyqtSignal()
     def __init__(self):
         super(SR830, self).__init__()
-        uic.loadUi("sr830/sr830.ui", self)
+        ui_path = os.path.join(os.path.dirname(__file__), "sr830.ui")
+        uic.loadUi(ui_path, self)
         w = pg.GraphicsLayoutWidget(show=True)
         w.viewport().setAttribute(QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False)
-        resource_manager = pyvisa.ResourceManager()
-        ls = resource_manager.list_resources()
+        try:
+            resource_manager = pyvisa.ResourceManager()
+            ls = resource_manager.list_resources()
+        except Exception as exc:
+            print(f"[WARN] Could not list SR830 VISA resources: {exc}")
+            ls = []
         self.address_cb.addItems(ls)
         self.plot_x = w.addPlot(row=0, col=0)
         self.plot_y = w.addPlot(row=1, col=0)
@@ -100,7 +106,7 @@ class SR830(QtWidgets.QWidget):
         self.plot_t.plot(self.t_log, clear=True, pen=pen1)
 
     def force_stop(self):
-        self.logic.reject_siginal = True
+        self.logic.reject_signal = True
 
 
     def stop_timer(self):
@@ -123,11 +129,17 @@ class SR830(QtWidgets.QWidget):
     def update_label(self, str):
         self.label_5.setText(str)
 
-    def connect_visa(self, addr = None):
-        if addr == None or addr == False:
+    def connect_visa(self, addr=None):
+        if addr is None or addr is False:
             addr = self.address_cb.currentText()
-        self.logic.connect_visa(addr)
-        self.address_cb.setCurrentText(addr)
+        if not addr:
+            self.update_label("No SR830 VISA address selected")
+            return
+        try:
+            self.logic.connect_visa(addr)
+            self.address_cb.setCurrentText(addr)
+        except Exception as exc:
+            self.update_label(f"SR830 connection failed: {exc}")
 
     ####### channles with both set and get #######
 
@@ -566,4 +578,3 @@ if __name__ == "__main__":
     window.connect_visa("GPIB0::7::INSTR")
     window.show()
     app.exec()
-

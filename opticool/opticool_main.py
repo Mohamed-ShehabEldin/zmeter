@@ -1,15 +1,15 @@
 #from distutils.command.build_scripts import first_line_re
 from PyQt6 import QtWidgets, uic, QtCore
+import os
 import sys
 from .opticool_logic import OptiCoolLogic
-import numpy as np
-import pyqtgraph as pg
 
 
 class OptiCool(QtWidgets.QWidget):
     def __init__(self):
         super(OptiCool, self).__init__()
-        uic.loadUi(r"opticool/opticool.ui", self)
+        ui_path = os.path.join(os.path.dirname(__file__), "opticool.ui")
+        uic.loadUi(ui_path, self)
         self.logic = OptiCoolLogic()
         self.connect_sig_slot()
 
@@ -39,7 +39,6 @@ class OptiCool(QtWidgets.QWidget):
         self.logic.start()
 
     def set_field(self):
-        print("set_field")
         field = self.lineEdit_2.text()
         field = float(field)
         self.logic.setpoint_tesla = field
@@ -47,7 +46,6 @@ class OptiCool(QtWidgets.QWidget):
         self.logic.start()
 
     def set_field_stable(self):
-        print("set_field_stable")
         field = self.lineEdit_2.text()
         field = float(field)
         self.logic.setpoint_tesla = field
@@ -79,4 +77,4 @@ if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     window = OptiCool()
     window.show()
-    app.exec_()
+    app.exec()

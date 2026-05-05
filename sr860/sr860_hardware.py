@@ -15,8 +15,12 @@ class SR860_Hardware:
         address : VISA resource string, e.g. 'GPIB0::12::INSTR'
         """
         self._address = address
-        rm = pyvisa.ResourceManager()
-        self._vi = rm.open_resource(self._address)
+        self._vi = None
+        try:
+            rm = pyvisa.ResourceManager()
+            self._vi = rm.open_resource(self._address)
+        except Exception as exc:
+            raise RuntimeError(f"Could not connect SR860 at {address}: {exc}") from exc
         self._vi.write_termination = '\n'
         self._vi.read_termination = '\n'
         self._vi.timeout = 100

@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Form</class>
+ <widget class="QWidget" name="Form">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>625</width>
+    <height>494</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <widget class="QGraphicsView" name="graphicsView">
+   <property name="geometry">
+    <rect>
+     <x>70</x>
+     <y>220</y>
+     <width>461</width>
+     <height>241</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="capture_once">
+   <property name="geometry">
+    <rect>
+     <x>240</x>
+     <y>100</y>
+     <width>93</width>
+     <height>28</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>capture once</string>
+   </property>
+  </widget>
+  <widget class="QDoubleSpinBox" name="int_time">
+   <property name="geometry">
+    <rect>
+     <x>190</x>
+     <y>50</y>
+     <width>71</width>
+     <height>22</height>
+    </rect>
+   </property>
+   <property name="singleStep">
+    <double>0.500000000000000</double>
+   </property>
+   <property name="value">
+    <double>1.000000000000000</double>
+   </property>
+  </widget>
+  <widget class="QSpinBox" name="accumilations">
+   <property name="geometry">
+    <rect>
+     <x>310</x>
+     <y>50</y>
+     <width>81</width>
+     <height>22</height>
+    </rect>
+   </property>
+   <property name="value">
+    <number>1</number>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label">
+   <property name="geometry">
+    <rect>
+     <x>170</x>
+     <y>30</y>
+     <width>111</width>
+     <height>16</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>integration time</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_2">
+   <property name="geometry">
+    <rect>
+     <x>310</x>
+     <y>30</y>
+     <width>111</width>
+     <height>16</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>accumilations</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="capture_cont">
+   <property name="geometry">
+    <rect>
+     <x>180</x>
+     <y>160</y>
+     <width>93</width>
+     <height>28</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>capture cont</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="stop">
+   <property name="geometry">
+    <rect>
+     <x>280</x>
+     <y>160</y>
+     <width>93</width>
+     <height>28</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>stop</string>
+   </property>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

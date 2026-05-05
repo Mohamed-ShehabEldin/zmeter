@@ -1,4 +1,5 @@
 from PyQt6 import QtWidgets, uic, QtCore
+import os
 import sys
 from .nidaq_logic import NIDAQLogic
 import numpy as np
@@ -10,7 +11,8 @@ class NIDAQ(QtWidgets.QWidget):
 
     def __init__(self):
         super(NIDAQ, self).__init__()
-        uic.loadUi(r"nidaq/nidaq.ui", self)
+        ui_path = os.path.join(os.path.dirname(__file__), "nidaq.ui")
+        uic.loadUi(ui_path, self)
         self.logic = NIDAQLogic()
 
         self.connect_sig_slot()
@@ -35,8 +37,8 @@ class NIDAQ(QtWidgets.QWidget):
         if device == "":
             device = self.dev_name_lineEdit.text()
         else:
-            pass
-        self.logic.initialize(device)
+            self.dev_name_lineEdit.setText(device)
+        self._connect_device(device)
 
     def connect_sig_slot(self):
         self.set_button.clicked.connect(self.when_set_button_clicked)
@@ -60,10 +62,17 @@ class NIDAQ(QtWidgets.QWidget):
 
     def when_set_button_clicked(self):
         name = self.dev_name_lineEdit.text()
-        self.logic.initialize(name)
+        self._connect_device(name)
 
     def when_close_button_clicked(self):
+        self.stop_timer()
         self.logic.close()
+
+    def _connect_device(self, name):
+        try:
+            self.logic.initialize(name)
+        except Exception as exc:
+            self.name_label.setText(f"OFF ({exc})")
 
     def setup_name_label(self, name):
         self.name_label.setText(f"using {name}")
@@ -100,6 +109,12 @@ class NIDAQ(QtWidgets.QWidget):
         labels[id].setText(f"last set to: {d:+.4f} V")
 
     def when_go_button_clicked(self, AO_index):
+        if not self.logic.is_initialized:
+            self.name_label.setText("OFF (not connected)")
+            return
+        if AO_index >= len(self.logic.AO_channels):
+            self.name_label.setText(f"AO{AO_index} is not available on this NIDAQ.")
+            return
         self.logic.wait()
 
         val = [
@@ -115,6 +130,12 @@ class NIDAQ(QtWidgets.QWidget):
         self.logic.start()
 
     def when_pm_button_clicked(self, AO_index, fun):
+        if not self.logic.is_initialized:
+            self.name_label.setText("OFF (not connected)")
+            return
+        if AO_index >= len(self.logic.AO_channels):
+            self.name_label.setText(f"AO{AO_index} is not available on this NIDAQ.")
+            return
         self.logic.wait()
 
         i = AO_index
@@ -140,12 +161,14 @@ class NIDAQ(QtWidgets.QWidget):
 
     def set_AO0(self, val):
         self.logic.target_AO["AO0"] = val
-        self.logic.job = "write_AO0"
+        self.logic.setup_channel("AO0")
+        self.logic.job = "write_AO"
         self.logic.start()
 
     def set_AO1(self, val):
         self.logic.target_AO["AO1"] = val
-        self.logic.job = "write_AO1"
+        self.logic.setup_channel("AO1")
+        self.logic.job = "write_AO"
         self.logic.start()
 
     def monitor(self):
@@ -168,6 +191,9 @@ class NIDAQ(QtWidgets.QWidget):
             self.logic.start()
 
     def start_timer(self):
+        if not self.logic.is_initialized:
+            self.name_label.setText("OFF (not connected)")
+            return
         if not self.timer.isActive():
             self.timer.start(50)
 

@@ -2,7 +2,6 @@ from PyQt6 import QtCore
 from .keithley24xx_hardware import Keithly24xxHardware
 import numpy as np
 import time
-import re
 
 
 class Keithley24xxLogic(QtCore.QThread):
@@ -69,12 +68,21 @@ class Keithley24xxLogic(QtCore.QThread):
             return
         self.ramp_voltage_to(val)
 
+    def set_voltage(self, val):
+        if self.sour != 'volt':
+            self.sour_func_to_volt()
+        self.set_ramp_source_voltage(val)
 
     def set_source_current(self, val):
         if self.sour != 'curr':
             return
         self.k24xxHardware.set_sour_curr_to(val)
         self.sig_last_set.emit(val)
+
+    def set_current(self, val):
+        if self.sour != 'curr':
+            self.sour_func_to_curr()
+        self.set_source_current(val)
     # ---------------------------- read ----------------------------
 
     def read(self):

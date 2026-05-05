@@ -25,11 +25,39 @@ from .thorlabs_utilities import (
     bind
 )
 
-# if os.path.isfile(r"C:\Program Files\Thorlabs\Kinesis\Thorlabs.MotionControl.IntegratedStepperMotors.dl"):
-#     lib = cdll.LoadLibrary(r"C:\Program Files\Thorlabs\Kinesis\Thorlabs.MotionControl.IntegratedStepperMotors.dll")
+_DLL_NAME = "Thorlabs.MotionControl.IntegratedStepperMotors.dll"
+_MODULE_DIR = os.path.dirname(__file__)
+_PROJECT_DIR = os.path.dirname(_MODULE_DIR)
+_LOCAL_KINESIS_DIR = os.path.join(_PROJECT_DIR, "Kinesis")
+_MODULE_KINESIS_DIR = os.path.join(_MODULE_DIR, "Kinesis")
+_THORLABS_KINESIS_DIR = r"C:\Program Files\Thorlabs\Kinesis"
+_DLL_CANDIDATES = [
+    os.path.join(_MODULE_DIR, _DLL_NAME),
+    os.path.join(_MODULE_KINESIS_DIR, _DLL_NAME),
+    os.path.join(_LOCAL_KINESIS_DIR, _DLL_NAME),
+    os.path.join(_THORLABS_KINESIS_DIR, _DLL_NAME),
+]
 
-if os.path.isfile(r"Kinesis\Thorlabs.MotionControl.IntegratedStepperMotors.dll"):
-    lib = cdll.LoadLibrary(r"Kinesis\Thorlabs.MotionControl.IntegratedStepperMotors.dll")
+_load_errors = []
+for _dll_path in _DLL_CANDIDATES:
+    if os.path.isfile(_dll_path):
+        try:
+            lib = cdll.LoadLibrary(_dll_path)
+            break
+        except OSError as exc:
+            _load_errors.append(f"{_dll_path}: {exc}")
+else:
+    searched = "\n".join(_DLL_CANDIDATES)
+    details = "\n".join(_load_errors) or "No candidate DLL file was found."
+    note = (
+        "Please install Thorlabs Kinesis, or copy the Kinesis folder into one of these locations:\n"
+        f"- {_LOCAL_KINESIS_DIR}\n"
+        f"- {_MODULE_KINESIS_DIR}\n"
+        f"The standard Windows install location is:\n- {_THORLABS_KINESIS_DIR}"
+    )
+    raise ImportError(
+        f"Could not load {_DLL_NAME}.\n\n{note}\n\nSearched:\n{searched}\n\nLoad details:\n{details}"
+    )
 
 # enum FT_Status
 FT_OK = c_short(0x00)

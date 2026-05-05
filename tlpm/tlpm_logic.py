@@ -14,6 +14,8 @@ class TLPMLogic(QtCore.QThread):
     def __init__(self):
         QtCore.QThread.__init__(self)
         self.is_connected = False
+        self.hardware = None
+        self.target = 532.0
         self.reset_flags()
         self.freq = 20
 
@@ -45,12 +47,8 @@ class TLPMLogic(QtCore.QThread):
             break
         tlPM.close()
 
-        # Create a new string buffer with the retrieved resource name
-        resource_string = c_char_p(resourceName.raw).value
-        new_resourceName = create_string_buffer(resource_string)
-
         self.hardware = TLPM_Hardware()
-        self.hardware.open(new_resourceName, c_bool(True), c_bool(True))
+        self.hardware.open(resourceName, c_bool(True), c_bool(True))
         message = create_string_buffer(1024)
         self.hardware.getCalibrationMsg(message)
         info = c_char_p(message.raw).value
@@ -58,10 +56,16 @@ class TLPMLogic(QtCore.QThread):
         self.sig_connect.emit(True)
         self.is_connected = True
 
+    def ensure_connected(self):
+        if not self.is_connected:
+            self.connect()
+
     def disconnect(self):
         if not self.is_connected:
             return
-        self.hardware.close()
+        if self.hardware is not None:
+            self.hardware.close()
+            self.hardware = None
         self.sig_connect.emit(False)
         self.is_connected = False
 
@@ -69,9 +73,16 @@ class TLPMLogic(QtCore.QThread):
         self.target = target
 
     def change_wavelength(self):
+        self.ensure_connected()
         self.hardware.setWavelength(ctypes.c_double(self.target))
 
+    def set_wavelength(self, target):
+        self.set_wavelength_target(target)
+        self.change_wavelength()
+        return self.target
+
     def read_power(self):
+        self.ensure_connected()
         power = c_double()
         self.hardware.measPower(byref(power))
         self.sig_power.emit(power.value)
@@ -83,9 +94,7 @@ class TLPMLogic(QtCore.QThread):
             time.sleep(1/self.freq)
 
     def get_power(self):
-        power = c_double()
-        self.hardware.measPower(byref(power))
-        return power.value
+        return self.read_power()
     
     def run(self):
         if self.do_connect:

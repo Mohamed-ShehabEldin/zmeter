@@ -1,12 +1,18 @@
+import os
+
 from PyQt6 import QtWidgets, uic
-import canonical_position_logic as logic
-from nidaq_hardware import NIDAQHardWare
+
+try:
+    from . import canonical_position_logic as logic
+except ImportError:
+    import canonical_position_logic as logic
 
 class auto_position_app(QtWidgets.QWidget):
     def __init__(self,daq):
         super(auto_position_app, self).__init__()
         # Load the .ui created in Qt Designer
-        uic.loadUi('auto_position_GUI.ui', self)
+        ui_path = os.path.join(os.path.dirname(__file__), "auto_position_GUI.ui")
+        uic.loadUi(ui_path, self)
         self.daq = daq
         self.RESULTS_DIR = None
         # set their text to the defaults in logic.py
@@ -22,6 +28,12 @@ class auto_position_app(QtWidgets.QWidget):
         logic.GALVO_X = self.lineGalvoX.text()
         logic.GALVO_Y = self.lineGalvoY.text()
         logic.PD_IN   = self.linePD.text()
+        if hasattr(self, "sigma_spin"):
+            logic.SIGMA = self.sigma_spin.value()
+        if hasattr(self, "kernel_spin"):
+            logic.KERNEL_SIZE = int(self.kernel_spin.value())
+        if hasattr(self, "cut"):
+            logic.CUT = int(self.cut.value())
 
         logic.X_CENTER   = self.spinXCenter.value()
         logic.Y_CENTER   = self.spinYCenter.value()
@@ -40,12 +52,27 @@ class auto_position_app(QtWidgets.QWidget):
             self.RESULTS_DIR = rd
 
         # Call the core logic
-        ap = logic.AutoPositionSystem(self.daq)
+        ap = logic.AutoPositionSystem(
+            self.daq,
+            galvo_x=logic.GALVO_X,
+            galvo_y=logic.GALVO_Y,
+            pd_in=logic.PD_IN,
+        )
         print("Starting autopositioning…")
-        logic.auto_positon(ap,save_dir=self.RESULTS_DIR)
+        result = logic.auto_position(ap, save_dir=self.RESULTS_DIR)
+        if result is not None:
+            if hasattr(self, "label_18"):
+                self.label_18.setText(f"{result['x0']:.4f}")
+            if hasattr(self, "label_19"):
+                self.label_19.setText(f"{result['y0']:.4f}")
+
+    def set_auto_position(self, _value):
+        self.start_auto_position()
 
 if __name__ == '__main__':
     import sys
+    from nidaq.nidaq_hardware import NIDAQHardWare
+
     app = QtWidgets.QApplication(sys.argv)
     daq = NIDAQHardWare()
     w = auto_position_app(daq)

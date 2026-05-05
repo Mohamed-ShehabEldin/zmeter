@@ -11,6 +11,8 @@ import serial
 
 import cv2
 import scipy.io as sio
+from scipy.ndimage import gaussian_filter
+from scipy.signal import medfilt
 
 class ANC_and_DAQ_xyz:
     '''
@@ -56,6 +58,7 @@ class stepper_and_galvo_xyz:
         self.baud_rate = 115200
         self.motor_rpm = 7
         self.ser = None
+        self.current_z = 0.0
 
     def connect_system(self): #it is just connect stepper for my case
         """Connect to the stepper motor via serial port."""
@@ -68,11 +71,13 @@ class stepper_and_galvo_xyz:
             self.ser.close()
             self.ser = None
     def move_z(self, z: float):
-        """Move the stepper motor to a specified angle."""
+        """Move the stepper motor to an absolute angle/step target."""
         if self.ser:
-            self.ser.write(f"stepperA {z}\n".encode())
-            t_move = abs(z)/360.0 * (60.0/self.motor_rpm)
+            delta = float(z) - self.current_z
+            self.ser.write(f"stepperA {delta}\n".encode())
+            t_move = abs(delta) / 360.0 * (60.0 / self.motor_rpm)
             time.sleep(t_move + 0.2)
+            self.current_z = float(z)
 
     def move_x(self, x: float):
         """Move the galvo X axis to a specified position."""
@@ -110,6 +115,9 @@ class autofocus_logic:
         self.threshold_metric_step = None # maybe for some cases converge based on focus metric is better
 
         self.current_z = 0.0
+        self.kernel_size = 3
+        self.sigma = 1.0
+        self.cut = 1
 
         # measure map paraeters
         self.x_center, self.y_center = 0.483, 0.77
@@ -125,26 +133,51 @@ class autofocus_logic:
             M = self.xyz_sys.measure_map(self.x_center, self.y_center,
                                     self.x_range, self.y_range,
                                     self.x_pts, self.y_pts)
-        return M
+        return self.process_data(M)
+
+    def process_data(self, data: np.ndarray | None) -> np.ndarray | None:
+        if data is None:
+            return None
+
+        processed = np.asarray(data, dtype=float)
+
+        kernel_size = int(self.kernel_size)
+        if kernel_size > 1:
+            if kernel_size % 2 == 0:
+                kernel_size += 1
+            processed = medfilt(processed, kernel_size=kernel_size)
+
+        sigma = float(self.sigma)
+        if sigma > 0:
+            processed = gaussian_filter(processed, sigma=sigma)
+
+        cut = max(int(self.cut), 0)
+        if cut > 0 and processed.shape[0] > 2 * cut and processed.shape[1] > 2 * cut:
+            processed = processed[cut:-cut, cut:-cut]
+
+        return processed
     
     @staticmethod
     def focus_metric(M: np.ndarray) -> float:
+        if M is None:
+            return float("-inf")
         gx = cv2.Sobel(M, cv2.CV_64F, 1, 0, ksize=3)
         gy = cv2.Sobel(M, cv2.CV_64F, 0, 1, ksize=3)
         return float(np.sum(gx*gx + gy*gy))
     
     def get_run_idx(self): #this will give the right number to use based on what exist in the save driectory
         """Get the next run index based on existing files in the save directory."""
-        if self.save_dir:
-            os.makedirs(self.save_dir, exist_ok=True)
-            run_idx = 1
-            while os.path.exists(os.path.join(self.save_dir, f"{run_idx:02d}.mat")):
-                run_idx += 1
+        if not self.save_dir:
+            return None
+        os.makedirs(self.save_dir, exist_ok=True)
+        run_idx = 1
+        while os.path.exists(os.path.join(self.save_dir, f"{run_idx:02d}.mat")):
+            run_idx += 1
         return run_idx
     
     def save_iteration(self,M,history_z_centers, history_metrics,iteration):
         """Save the current as png image"""
-        if self.save_dir is None:
+        if not self.save_dir:
             print("Save directory not set. Skipping save.")
             return
         # interactive plots: map + metric
@@ -170,16 +203,21 @@ class autofocus_logic:
         ax_metric.grid(True)
         
         run_idx = self.get_run_idx()  # Get the next run index
+        if run_idx is None:
+            return
         fname = f"{run_idx:02d}_{iteration:02d}.png"
         fig.savefig(os.path.join(self.save_dir, fname))
+        plt.close(fig)
 
     def save_run(self,histroy_xymaps, history_metrics):
         """Save the entire autofocus run's data to a file."""
-        if self.save_dir is None:
+        if not self.save_dir:
             print("Save directory not set. Skipping save.")
             return
         # Save all history data to a text file
         run_idx = self.get_run_idx()  # Get the next run index
+        if run_idx is None:
+            return
         mat_name = f"{run_idx:02d}.mat"
         mat_path = os.path.join(self.save_dir, mat_name)
         sio.savemat(mat_path, {"xy_maps": histroy_xymaps, "metrics": history_metrics})
@@ -188,6 +226,8 @@ class autofocus_logic:
 
     def set_AutoFocus(self):
         """Perform autofocus by iteratively adjusting the stepper motor position."""
+        if self.xyz_sys is None:
+            raise RuntimeError("Autofocus xyz system is not configured.")
         #for data saving
         history_z_centers = []
         history_metrics = []
@@ -195,18 +235,18 @@ class autofocus_logic:
 
         #for while loop initiaiotn
         iteration = 0
-        center_z=0
+        center_z = self.current_z
         curr_z_step=self.initial_z_step 
 
         while curr_z_step>self.threshold_z_step:
-            z_pos = [center_z - curr_z_step, center_z, center_z + curr_z_step]
+            z_pos = [center_z - curr_z_step / 2.0, center_z, center_z + curr_z_step / 2.0]
             f_vals = [] # the values for the focus metric for each Z_position
             M_vals= []
 
-            print(f"\nScanning ±{curr_z_step:.1f}° around {center_z:.1f}°")
+            print(f"\nScanning ±{curr_z_step / 2.0:.1f}° around {center_z:.1f}°")
 
             for z in z_pos:
-                self.xyz_sys.move_z(z) # this is a relative motion if Z is 1000 it will move 1000 from the current position
+                self.xyz_sys.move_z(z)
                 # acquire and display map
                 M = self.measure_map()
 
@@ -230,7 +270,12 @@ class autofocus_logic:
             self.save_iteration(M_vals[best], history_z_centers, history_metrics, iteration)
         
         self.xyz_sys.move_z(center_z)  # Move to the best focus position
+        self.current_z = center_z
         self.save_run(histroy_xymaps, history_metrics)
+
+    def set_autofocus(self, _value):
+        """Scan-facing autofocus action."""
+        self.set_AutoFocus()
 
 
 if __name__ == "__main__":

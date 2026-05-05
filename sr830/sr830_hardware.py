@@ -17,15 +17,21 @@ class SR830_Hardware:
         Output:
             None
         '''
+        self._address = None
+        self._visainstrument = None
         if address:
             self.connect_visa(address)
 
     # Functions
     def connect_visa(self, address):
         self._address = address
-        resource_manager = pyvisa.ResourceManager()
-        # 'GPIB0::7::INSTR'
-        self._visainstrument = resource_manager.open_resource(self._address)
+        try:
+            resource_manager = pyvisa.ResourceManager()
+            # 'GPIB0::7::INSTR'
+            self._visainstrument = resource_manager.open_resource(self._address)
+        except Exception as exc:
+            self._visainstrument = None
+            raise RuntimeError(f"Could not connect SR830 at {address}: {exc}") from exc
         # self._instID = self._visainstrument.query("*IDN?")
         # print(self._instID)
         # for i in range(100):
