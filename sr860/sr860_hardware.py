@@ -15,9 +15,8 @@ class SR860_Hardware:
         address : VISA resource string, e.g. 'GPIB0::12::INSTR'
         """
         self._address = address
-        self._vi = None
+        rm = pyvisa.ResourceManager()
         try:
-            rm = pyvisa.ResourceManager()
             self._vi = rm.open_resource(self._address)
         except Exception as exc:
             raise RuntimeError(f"Could not connect SR860 at {address}: {exc}") from exc
@@ -32,17 +31,17 @@ class SR860_Hardware:
 
     def _query(self, cmd: str) -> str:
         logging.debug(f"? {cmd}")
-        
+
+        last_error = None
         count = 0
         while count < 3:
             try:
                 return self._vi.query(cmd).strip()
             except Exception as e:
+                last_error = e
                 count += 1
-                print(f"Error querying {cmd}, trying again {count} times")
                 time.sleep(0.01)
-        print(f"Error querying {cmd}")
-        return None
+        raise RuntimeError(f"Error querying '{cmd}' after 3 retries: {last_error}")
 
     # -------------- identity / reset ----------------
     def idn(self) -> str:

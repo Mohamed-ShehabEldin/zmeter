@@ -1,12 +1,33 @@
-/pycache/
+# Python bytecode and build artifacts
 *.pyc
+*.pyo
+*.pyd
 __pycache__/
 */__pycache__/*
 **/__pycache__
+/pycache/
+
+# Common cache directories/files
+.cache/
+*/.cache/
+**/.cache/
+*.cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Local OS/editor scratch files
 .DS_Store
 **/.DS_Store
+.vscode/
 **/tempCodeRunnerFile.py
 **/try.py
+
+# Project data and generated output
+data/
+
+# Large Thorlabs Kinesis vendor installs should stay local.
 Kinesis/*
 !Kinesis/README.txt
 k10cr1/Kinesis/*

@@ -14,6 +14,9 @@ from core.mainWindow import MainWindow
 # ------------------------------------------------------------
 from sr830.sr830_main import SR830
 from sr860.sr860_main import SR860
+# Optional newer SR830 implementation from Xuguo's opticool_SR860_bug_fix branch.
+# It has stricter connection validation, logging, and monitor controls.
+# from sr830_v2.sr830_main import SR830 as SR830V2
 
 try:
     from hp34401a.hp34401a_main import HP34401A
@@ -42,6 +45,15 @@ except (ImportError, ModuleNotFoundError, NotImplementedError) as e:
     print(f"⚠️  NI6432 module unavailable on this platform: {e}")
     NI6432_AVAILABLE = False
     NI6432 = None
+
+# NI6423 is Xuguo's newer nidaqmx implementation with persistent AI/counter tasks.
+try:
+    from ni6423.ni6423_main import NI6423
+    NI6423_AVAILABLE = True
+except (ImportError, ModuleNotFoundError, NotImplementedError) as e:
+    print(f"⚠️  NI6423 module unavailable on this platform: {e}")
+    NI6423_AVAILABLE = False
+    NI6423 = None
 
 # K10CR1 (Thorlabs stepper motor) only works on Windows with DLL
 try:
@@ -84,6 +96,11 @@ except (ImportError, ModuleNotFoundError, NotImplementedError) as e:
     AUTOFOCUS_XZ_AVAILABLE = False
     AutofocusXZMain = None
 
+# Optional manual autofocus tool. Keep commented unless you want to expose it
+# through the main zmeter equipment list; autofocus_main imports NIDAQ hardware.
+# from auto_focus.autofocus_main import autofocus_main
+# from auto_focus.autofocus_logic import stepper_and_galvo_xyz
+
 
 
 save_path = os.path.join(os.getcwd(), "data")
@@ -94,6 +111,7 @@ def create_equipment():
 
     equips = {
         "lockin_1": SR830(),
+        # "lockin_0": SR830V2(),
         # "lockin_2": SR830(),
         # "sr860_test": SR860(),
     }
@@ -106,6 +124,9 @@ def create_equipment():
     # Optional newer NI DAQ device from zmeter.
     # if NI6432_AVAILABLE:
     #     equips["ni6432_0"] = NI6432()
+    # Optional NI6423 device from Xuguo's opticool_SR860_bug_fix branch.
+    # if NI6423_AVAILABLE:
+    #     equips["ni6423_0"] = NI6423()
     
     # Only add K10CR1 if available (Windows only)
     if K10CR1_AVAILABLE:
@@ -133,6 +154,9 @@ def create_equipment():
     #     equips["montana2"] = Montana2()
     # if AUTOFOCUS_XZ_AVAILABLE:
     #     equips["autofocusXZ"] = AutofocusXZMain()
+    # Optional manual autofocus window. Requires constructing and assigning an
+    # xyz system first, for example stepper_and_galvo_xyz(daq_hardware).
+    # equips["autofocus"] = autofocus_main()
 
     # ------------------------------------------------------------
     # Connection commands – adjust to match your instrument addresses.
@@ -146,6 +170,8 @@ def create_equipment():
         # equips["nidaq_1"].connect("Dev2")
     # if NI6432_AVAILABLE and "ni6432_0" in equips:
     #     equips["ni6432_0"].connect("Dev7")
+    # if NI6423_AVAILABLE and "ni6423_0" in equips:
+    #     equips["ni6423_0"].connect("Dev2")
     
     if K10CR1_AVAILABLE:
         # equips["KR_in"].connect(serial="55000923")
@@ -178,6 +204,10 @@ def create_equipment():
     # Full NI6432 channel families are:
     # set: AO0-AO3
     # get: AI0-AI31, counter0-counter3, AO0-AO3 feedback
+    # Recommended NI6423 filters if "ni6423_0" is enabled:
+    # equips_set_channels["ni6423_0"] = ["AO0", "AO1"]
+    # equips_get_channels["ni6423_0"] = ["AI0", "AI1", "AI4", "counter0"]
+    # NI6423 uses persistent AI/counter tasks; current counter read path is counter0.
     # Recommended legacy NIDAQ filters if "nidaq_0" is enabled:
     # equips_set_channels["nidaq_0"] = ["AO0", "AO1"]
     # equips_get_channels["nidaq_0"] = ["AI0", "AI1", "AI2", "AI3", "AI4", "AI5", "AI6", "AI7", "count"]
@@ -212,6 +242,8 @@ def create_equipment():
     #     "aux_1",
     #     "aux_2",
     # ]
+    # SR830V2 exposes the same scan-facing channel names; use the same filters
+    # with its equipment label if you enable "lockin_0": SR830V2() above.
     # equips_get_channels["lockin_1"] = [
     #     "X",
     #     "Y",
@@ -261,6 +293,9 @@ def create_equipment():
     # Recommended TLPM filters:
     # equips_set_channels["tlpm_0"] = ["wavelength"]
     # equips_get_channels["tlpm_0"] = ["power"]
+    # Recommended manual autofocus trigger if "autofocus" is enabled:
+    # equips_set_channels["autofocus"] = ["autofocus"]
+    # equips_get_channels["autofocus"] = []
     equips_set_channels["Keithley_0"] = ["voltage", "current"]
     equips_get_channels["Keithley_0"] = ["voltage", "current"]
     equips_set_channels["Keithley_1"] = ["voltage", "current"]

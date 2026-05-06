@@ -14,6 +14,7 @@ Primary usage is experiment automation where each scan point sets one or more ch
 Quick scan docs for this repo:
 - `documents/README_scan_overview.md` (UI/start flow + level-setting build path)
 - `documents/README_scan_logic.md` (runtime engine behavior in `core/scan_logic_new.py`)
+- `sr860/sr860_readme.md` (SR860 monitor/logging behavior and known risks)
 
 ## 2. Entrypoint And Runtime Boot
 Primary entrypoint: `start_zmeter.py`.
@@ -26,11 +27,18 @@ Boot sequence:
 5. Show main window.
 
 Current default instruments enabled in `start_zmeter.py`:
-- `nidaq_0 = NIDAQ()`, connected to `"Dev1"`
-- `Keithley_0 = Keithley24xx()`, connected to `"GPIB2::17::INSTR"`
-- `Keithley_1 = Keithley24xx()`, connected to `"GPIB2::18::INSTR"`
+- `lockin_1 = SR830()`
+- `nidaq_0 = NIDAQ()` when the PyDAQmx import succeeds, connected to `"Dev1"`
+- `KR_in = K10CR1()` and `KR_spec = K10CR1()` when the Kinesis import succeeds; serial connects are currently commented
+- `sp150_0 = SP150()`
+- `Keithley_0 = Keithley24xx()`, connected to `"GPIB0::1::INSTR"`
+- `Keithley_1 = Keithley24xx()`, connected to `"GPIB0::18::INSTR"`
+- `tlpm_0 = TLPM()`
+- `winspec = ethernet_winspec()`
+- `noninstrumental = noninstrumental()`
+- `opticool = OptiCool()` when the OptiCool import succeeds
 
-Other imports are available but commented for optional setups.
+Other imports are available but commented or optional for setup-specific use, including `SR830V2`, `SR860`, `HP34401A`, `NI6432`, `NI6423`, `Montana2`, and autofocus tools.
 
 ## 3. Core Architecture
 Top-level runtime stack:
@@ -246,8 +254,9 @@ Instrument directories generally include `<name>_main.py`, `<name>_logic.py`, `<
 Examples:
 - `nidaq/`: NI-DAQ via PyDAQmx.
 - `ni6432/`: NI USB-6432 via `nidaqmx`, with AO feedback, hardware-clocked AI integration, hardware-gated counter reads, dual integration times, and a dedicated PyQt UI/logic stack.
+- `ni6423/`: Xuguo's newer `nidaqmx` implementation with persistent AO/AI/counter tasks and a dedicated UI/logic stack.
 - `keithley24xx/`: Keithley 24xx via PyVISA.
-- `sr860/`, `sr830/`: lock-ins via PyVISA.
+- `sr860/`, `sr830/`, `sr830_v2/`: lock-ins via PyVISA.
 - `montana2/`: cryostat controller via Montana libs.
 - `hp34401a/`, `k10cr1/`, `tlpm/`, `opticool/`, `demoDevice/` etc.
 
@@ -256,6 +265,8 @@ Note:
   - `ni6432/ni6432_hardware.py`: `nidaqmx` hardware layer with `connect`, `disconnect`, AO write, hardware-clocked AI integration, and gated counter integration.
   - `ni6432/ni6432_logic.py`: scan-facing `set_AO*`, `get_AI*`, `get_counter*`, `get_AO*` methods, plus AO-feedback caching and separate AO/counter integration times.
   - `ni6432/ni6432_main.py`: GUI wrapper around `ni6432.ui` with AO controls, AO feedback readback, AI/counter live monitor modes, and scan pause/resume hooks.
+- `ni6423` is a separate added device, not a replacement for `ni6432`. It currently documents persistent AI/counter task design in `ai_refactor_v1.md`, `counter_refactor_v1.md`, and `cI_channel_structure.md`.
+- `sr860` includes the `opticool_SR860_bug_fix` updates: connection validation by `*IDN?`, a UI log panel, and manual monitor control through `stop_monitor()`.
 
 ## 15. Important File Map
 - `start_zmeter.py`: app entry, instrument selection, connect addresses.
@@ -265,6 +276,10 @@ Note:
 - `ni6432/ni6432_main.py`: NI USB-6432 widget/UI bindings.
 - `ni6432/ni6432_logic.py`: NI USB-6432 scan-facing getters/setters and monitor logic.
 - `ni6432/ni6432_hardware.py`: NI USB-6432 low-level `nidaqmx` operations.
+- `ni6423/ni6423_main.py`: NI USB-6423 widget/UI bindings.
+- `ni6423/ni6423_logic.py`: NI USB-6423 scan-facing getters/setters and monitor logic.
+- `ni6423/ni6423_hardware.py`: NI USB-6423 low-level `nidaqmx` operations.
+- `sr860/sr860_readme.md`: SR860 module guide and known-risk notes for future sessions.
 - `core/scanlist.py`: scan queue UI + sequential worker.
 - `core/scan.py`: scan editor, controls, save/load, per-page plots.
 - `core/scan_logic_new.py`: recursive scan execution and progress.
