@@ -1,3 +1,4 @@
+import os
 import sys
 from typing import Dict, Optional
 
@@ -5,9 +6,9 @@ import numpy as np
 import pyqtgraph as pg
 from PyQt6 import QtCore, QtWidgets, uic
 
-try:
+if __package__:
     from .ni6423_logic import NI6423Logic
-except ImportError:
+else:
     from ni6423_logic import NI6423Logic
 
 
@@ -20,7 +21,8 @@ class NI6423(QtWidgets.QWidget):
 
     def __init__(self):
         super().__init__()
-        uic.loadUi("ni6423/ni6423.ui", self)
+        ui_path = os.path.join(os.path.dirname(__file__), "ni6423.ui")
+        uic.loadUi(ui_path, self)
 
         self.logic = NI6423Logic()
 

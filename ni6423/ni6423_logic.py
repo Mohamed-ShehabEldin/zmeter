@@ -6,9 +6,9 @@ from typing import Deque, Dict, Optional, Set
 
 from PyQt6 import QtCore
 
-try:
+if __package__:
     from .ni6423_hardware import NI6423Hardware
-except ImportError:
+else:
     from ni6423_hardware import NI6423Hardware
 
 

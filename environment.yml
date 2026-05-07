@@ -27,6 +27,7 @@ dependencies:
       - mpmath==1.3.0
       - numpy==2.2.4
       - matplotlib==3.10.0
+      - pylablib>=1.4.3
       - pillow==11.2.1
       - pydaqmx==1.4.7
       - pyqt6==6.9.0

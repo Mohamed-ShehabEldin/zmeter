@@ -96,6 +96,14 @@ except (ImportError, ModuleNotFoundError, NotImplementedError) as e:
     AUTOFOCUS_XZ_AVAILABLE = False
     AutofocusXZMain = None
 
+try:
+    from Andor.andor_main import Andor
+    ANDOR_AVAILABLE = True
+except (ImportError, ModuleNotFoundError, NotImplementedError) as e:
+    print(f"⚠️  Andor module unavailable on this platform: {e}")
+    ANDOR_AVAILABLE = False
+    Andor = None
+
 # Optional manual autofocus tool. Keep commented unless you want to expose it
 # through the main zmeter equipment list; autofocus_main imports NIDAQ hardware.
 # from auto_focus.autofocus_main import autofocus_main
@@ -154,6 +162,8 @@ def create_equipment():
     #     equips["montana2"] = Montana2()
     # if AUTOFOCUS_XZ_AVAILABLE:
     #     equips["autofocusXZ"] = AutofocusXZMain()
+    # if ANDOR_AVAILABLE:
+    #     equips["andor_0"] = Andor()
     # Optional manual autofocus window. Requires constructing and assigning an
     # xyz system first, for example stepper_and_galvo_xyz(daq_hardware).
     # equips["autofocus"] = autofocus_main()
@@ -296,6 +306,9 @@ def create_equipment():
     # Recommended manual autofocus trigger if "autofocus" is enabled:
     # equips_set_channels["autofocus"] = ["autofocus"]
     # equips_get_channels["autofocus"] = []
+    # Recommended Andor filters if you enable "andor_0" above:
+    # equips_set_channels["andor_0"] = ["temperature"]
+    # equips_get_channels["andor_0"] = ["temperature"]
     equips_set_channels["Keithley_0"] = ["voltage", "current"]
     equips_get_channels["Keithley_0"] = ["voltage", "current"]
     equips_set_channels["Keithley_1"] = ["voltage", "current"]

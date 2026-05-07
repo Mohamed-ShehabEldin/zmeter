@@ -38,7 +38,7 @@ Current default instruments enabled in `start_zmeter.py`:
 - `noninstrumental = noninstrumental()`
 - `opticool = OptiCool()` when the OptiCool import succeeds
 
-Other imports are available but commented or optional for setup-specific use, including `SR830V2`, `SR860`, `HP34401A`, `NI6432`, `NI6423`, `Montana2`, and autofocus tools.
+Other imports are available but commented or optional for setup-specific use, including `SR830V2`, `SR860`, `HP34401A`, `NI6432`, `NI6423`, `Montana2`, `Andor`, and autofocus tools.
 
 ## 3. Core Architecture
 Top-level runtime stack:
@@ -258,6 +258,7 @@ Examples:
 - `keithley24xx/`: Keithley 24xx via PyVISA.
 - `sr860/`, `sr830/`, `sr830_v2/`: lock-ins via PyVISA.
 - `montana2/`: cryostat controller via Montana libs.
+- `Andor/`: Andor camera UI/logic using `pylablib` as the preferred hardware backend.
 - `hp34401a/`, `k10cr1/`, `tlpm/`, `opticool/`, `demoDevice/` etc.
 
 Note:
@@ -267,6 +268,7 @@ Note:
   - `ni6432/ni6432_main.py`: GUI wrapper around `ni6432.ui` with AO controls, AO feedback readback, AI/counter live monitor modes, and scan pause/resume hooks.
 - `ni6423` is a separate added device, not a replacement for `ni6432`. It currently documents persistent AI/counter task design in `ai_refactor_v1.md`, `counter_refactor_v1.md`, and `cI_channel_structure.md`.
 - `sr860` includes the `opticool_SR860_bug_fix` updates: connection validation by `*IDN?`, a UI log panel, and manual monitor control through `stop_monitor()`.
+- `Andor` is optional in `start_zmeter.py`; it is guarded so missing `pylablib`/vendor drivers do not prevent UI startup.
 
 ## 15. Important File Map
 - `start_zmeter.py`: app entry, instrument selection, connect addresses.
@@ -279,6 +281,9 @@ Note:
 - `ni6423/ni6423_main.py`: NI USB-6423 widget/UI bindings.
 - `ni6423/ni6423_logic.py`: NI USB-6423 scan-facing getters/setters and monitor logic.
 - `ni6423/ni6423_hardware.py`: NI USB-6423 low-level `nidaqmx` operations.
+- `Andor/andor_main.py`: Andor camera widget/UI bindings.
+- `Andor/andor_logic.py`: Andor camera scan-facing logic and acquisition dispatcher.
+- `Andor/andor_hardware_new.py`: Andor camera hardware backend through `pylablib`.
 - `sr860/sr860_readme.md`: SR860 module guide and known-risk notes for future sessions.
 - `core/scanlist.py`: scan queue UI + sequential worker.
 - `core/scan.py`: scan editor, controls, save/load, per-page plots.
