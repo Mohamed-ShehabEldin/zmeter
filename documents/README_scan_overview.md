@@ -92,7 +92,23 @@ Code pointers:
 
 Channel names are stored as full scan-channel strings (for example `nidaq_0_AO0`) and passed directly into `ScanLogic`.
 
-## 5) Practical Edit Map
+## 5) Spectrum Getter Plotting
+
+Most getters return one scalar value per scan point. The Andor spectrum getter
+is different: `andor_0_spectrum` returns a `2 x N` array with spectrum axis in
+row 0 and intensity in row 1.
+
+When a line plot uses an array-valued getter as Y, `core/all_plots.py` switches
+from a scalar line to a spectrum map:
+- X axis: wavelength or pixel axis from the spectrum
+- Y axis: selected scan/count/wait axis
+- Color: intensity
+
+The scalar compatibility getters `andor_0_spectrum_mean` and
+`andor_0_spectrum_sum` remain available when a normal single-value plot is
+preferred.
+
+## 6) Practical Edit Map
 
 If you want to change:
 - Level UI layout/text: `core/ui/individual_level.ui`
@@ -102,3 +118,4 @@ If you want to change:
 - Method parser semantics (`+`, `,`, nesting behavior): `core/brakets.py`
 - Scan run/start-stop orchestration: `core/scan.py`
 - Scan thread execution: `core/scan_logic_new.py`
+- Spectrum map orientation/array plotting: `core/all_plots.py`

@@ -235,8 +235,12 @@ class ScanLogic(QtCore.QThread):
             for i in range(level_number - 1, level_index - 1, -1):
                 data_shape.append(self.level_target_counts[i])
             
-            # Initialize with NaN values (indicates no measurement taken yet)
-            self.level_data_arrays.append(np.full(shape=data_shape, fill_value=np.nan))
+            # Store scalar getters and array getters in the same scan buffer.
+            # Scalar devices still write one number; Andor spectrum writes an
+            # array object such as [[wavelength...], [intensity...]].
+            self.level_data_arrays.append(
+                np.full(shape=data_shape, fill_value=np.nan, dtype=object)
+            )
         
         # Initialize position tracking arrays for each level
         self.current_target_indices = []
@@ -566,7 +570,6 @@ class ScanLogic(QtCore.QThread):
             # Ensure proper cleanup regardless of how scan ends
             self.reset_flags()
             self.main_window.artificial_channel_logic.reset_skip_next_scan_read()
-            print("scan finished here")
             
             # Re-enable equipment that was stopped for scanning
             self.main_window.start_equipments()
@@ -582,7 +585,6 @@ class ScanLogic(QtCore.QThread):
         and initiates scanning if requested.
         """
         if self.go_scan:
-            print("start scanning")
             self.scan()
 
         # Reset flags when thread execution completes

@@ -56,6 +56,11 @@ class LinePlot(QtWidgets.QWidget):
         self.getter_number=int(self.y_name[3])
                 
         self.y_coordinates=np.full(self.setting_info_length, np.nan)
+        self.array_trace_mode = False
+        self.spectrum_axis = None
+        self.spectrum_map_data = None
+        self.spectrum_image = None
+        self.spectrum_h_line = None
         self.update_count = 0
         # self.timer = QtCore.QTimer()
         # self.timer.timeout.connect(self.update_plot)
@@ -63,6 +68,12 @@ class LinePlot(QtWidgets.QWidget):
         # self.plot_line()
         
     def update_label(self):
+        # New array-valued getter path: report the current spectrum-map point.
+        if getattr(self, "array_trace_mode", False):
+            self._update_array_trace_label()
+            return
+
+        # Original scalar getter path: interpolate one Y value along the scan.
         pos = self.v_line.pos()
         x_pos = pos.x()
         if x_pos > self.x_coordinates[-1] or x_pos < self.x_start:
@@ -94,6 +105,200 @@ class LinePlot(QtWidgets.QWidget):
             y_val_text = f"{y_val:.4e}" if abs(y_val) >= 1e-3 or y_val == 0 else f"{y_val:.4e}"
         
         self.label.setText(f'X: {x_val_text}, Y: {y_val_text}')
+
+    def _coerce_array_trace(self, value):
+        """Return ``(spectrum_axis, intensity)`` for array-valued getters.
+
+        Scalar getters return ``None`` and continue through the old line-plot
+        path.  Andor ``get_spectrum`` returns a 2 x N array, but this also
+        accepts plain 1D intensity arrays and N x 2 arrays.
+        """
+        arr = np.asarray(value)
+        if arr.ndim == 0:
+            return None
+        arr = np.squeeze(arr)
+        if arr.ndim == 1:
+            return np.arange(arr.size, dtype=float), arr.astype(float, copy=False)
+        if arr.ndim == 2:
+            if arr.shape[0] == 2:
+                return arr[0].astype(float, copy=False), arr[1].astype(float, copy=False)
+            if arr.shape[1] == 2:
+                return arr[:, 0].astype(float, copy=False), arr[:, 1].astype(float, copy=False)
+        return np.arange(arr.size, dtype=float), arr.reshape(-1).astype(float, copy=False)
+
+    def _numeric_scan_axis(self):
+        try:
+            axis = np.asarray(self.x_coordinates, dtype=float)
+        except (TypeError, ValueError):
+            axis = np.arange(self.setting_info_length, dtype=float)
+        if axis.ndim != 1 or len(axis) != self.setting_info_length:
+            axis = np.arange(self.setting_info_length, dtype=float)
+        return axis
+
+    def _reset_spectrum_map(self, spectrum_axis):
+        """Create a fresh intensity map: rows=spectrum, columns=scan points.
+
+        The displayed image uses spectrum axis on X and scan/count on Y.
+        """
+        self.spectrum_axis = np.asarray(spectrum_axis, dtype=float)
+        self.spectrum_map_data = np.full(
+            (len(self.spectrum_axis), self.setting_info_length),
+            np.nan,
+            dtype=float,
+        )
+
+        if self.spectrum_image is None:
+            self.spectrum_image = pg.ImageItem(axisOrder="col-major")
+            self.plot.addItem(self.spectrum_image)
+
+        if self.spectrum_h_line is None:
+            self.spectrum_h_line = pg.InfiniteLine(angle=0, movable=True)
+            self.plot.addItem(self.spectrum_h_line)
+            self.spectrum_h_line.sigPositionChanged.connect(self.update_label)
+
+        if hasattr(self, 'line') and self.line is not None:
+            try:
+                self.plot.removeItem(self.line)
+            except (ValueError, RuntimeError):
+                pass
+            self.line = None
+
+        self.plot.setLabel('left', self.x_name)
+        self.plot.setLabel('bottom', "spectrum axis")
+        self.plot.setLabel('top', self.y_name)
+
+    def _update_spectrum_map_image(self):
+        """Redraw the spectrum map image on the existing PlotWidget.
+
+        ``ImageItem(axisOrder="col-major")`` interprets data as ``data[x, y]``.
+        ``spectrum_map_data`` is stored as ``[spectrum_index, scan_index]``, so
+        no transpose is needed: X is wavelength/pixel and Y is scan/count.
+        """
+        if self.spectrum_map_data is None or self.spectrum_image is None:
+            return
+
+        scan_axis = self._numeric_scan_axis()
+        self.spectrum_image.setImage(self.spectrum_map_data, autoLevels=True)
+
+        x_min = float(np.nanmin(self.spectrum_axis))
+        x_max = float(np.nanmax(self.spectrum_axis))
+        y_min = float(np.nanmin(scan_axis))
+        y_max = float(np.nanmax(scan_axis))
+        x_width = x_max - x_min
+        y_height = y_max - y_min
+        if x_width == 0:
+            x_min -= 0.5
+            x_width = 1.0
+        if y_height == 0:
+            y_min -= 0.5
+            y_height = 1.0
+        self.spectrum_image.setRect(QtCore.QRectF(x_min, y_min, x_width, y_height))
+
+    def _plot_array_trace(self, value, point_index=None):
+        """Update the new spectrum-map plot path.
+
+        Returns True when ``value`` is array-like and was handled here.
+        Returns False for scalar values so the original line-plot code can run.
+        """
+        trace = self._coerce_array_trace(value)
+        if trace is None:
+            return False
+        x_values, y_values = trace
+        self.array_trace_mode = True
+
+        if point_index is None:
+            point_index = 0
+        point_index = int(point_index)
+        if point_index < 0 or point_index >= self.setting_info_length:
+            return True
+
+        needs_reset = (
+            self.spectrum_map_data is None
+            or self.spectrum_axis is None
+            or self.spectrum_map_data.shape != (len(x_values), self.setting_info_length)
+            or not np.array_equal(self.spectrum_axis, x_values)
+            or point_index == 0
+        )
+        if needs_reset:
+            self._reset_spectrum_map(x_values)
+
+        self.spectrum_map_data[:, point_index] = y_values
+        self._update_spectrum_map_image()
+
+        if hasattr(self, 'v_line') and self.v_line is not None:
+            scan_axis = self._numeric_scan_axis()
+            self.v_line.setBounds(
+                [float(np.nanmin(self.spectrum_axis)), float(np.nanmax(self.spectrum_axis))]
+            )
+            if self.spectrum_h_line is not None:
+                self.spectrum_h_line.setBounds(
+                    [float(np.nanmin(scan_axis)), float(np.nanmax(scan_axis))]
+                )
+        self.update_label()
+        return True
+
+    def _ensure_scalar_line_cursor(self):
+        """Make sure the original scalar line cursor exists and is usable."""
+        v_line_exists = hasattr(self, 'v_line') and self.v_line is not None
+        if v_line_exists:
+            try:
+                _ = self.v_line.pos()
+            except (AttributeError, RuntimeError):
+                v_line_exists = False
+
+        if not v_line_exists:
+            if hasattr(self, 'v_line') and self.v_line is not None:
+                try:
+                    self.plot.removeItem(self.v_line)
+                except (ValueError, RuntimeError):
+                    pass
+
+            self.v_line = pg.InfiniteLine(angle=90, movable=True)
+            self.plot.addItem(self.v_line)
+            self.v_line.sigPositionChanged.connect(self.update_label)
+
+    def _remove_scalar_line(self):
+        if hasattr(self, 'line') and self.line is not None:
+            try:
+                self.plot.removeItem(self.line)
+            except (ValueError, RuntimeError):
+                pass
+            self.line = None
+
+    def _plot_scalar_line(self, point_index, measured_value):
+        """Original single-value getter path."""
+        self.array_trace_mode = False
+        self.y_coordinates[point_index] = measured_value
+        self._remove_scalar_line()
+        self._ensure_scalar_line_cursor()
+        self.line = self.plot.plot(
+            list(self.x_coordinates),
+            list(self.y_coordinates),
+            pen=pg.mkPen(color=(240, 255, 255), width=2),
+        )
+
+    def _update_array_trace_label(self):
+        if self.spectrum_map_data is None or self.spectrum_axis is None:
+            self.label.setText("No spectrum")
+            return
+
+        scan_axis = self._numeric_scan_axis()
+        spectrum_pos = self.v_line.pos().x()
+        scan_pos = self.spectrum_h_line.pos().y() if self.spectrum_h_line is not None else scan_axis[0]
+
+        spectrum_index = int(np.nanargmin(np.abs(self.spectrum_axis - spectrum_pos)))
+        scan_index = int(np.nanargmin(np.abs(scan_axis - scan_pos)))
+        intensity = self.spectrum_map_data[spectrum_index, scan_index]
+        if np.isnan(intensity):
+            self.label.setText(
+                f'Axis: {self.spectrum_axis[spectrum_index]:.4e}, '
+                f'Y: {scan_axis[scan_index]:.4e}, Intensity: NaN'
+            )
+            return
+        self.label.setText(
+            f'Axis: {self.spectrum_axis[spectrum_index]:.4e}, '
+            f'Y: {scan_axis[scan_index]:.4e}, Intensity: {intensity:.4e}'
+        )
     
     def _format_x_values(self, left_val_x, right_val_x, x_pos, left_bound_x, right_bound_x):
         """Format X values handling lists, single values, and NaN values"""
@@ -143,45 +348,21 @@ class LinePlot(QtWidgets.QWidget):
         return 0 
 
     def plot_line(self,current_target_index):
-        # Update the data point
+        # ``measured_value`` can be a scalar (old behavior) or an array
+        # spectrum (new behavior).
         reversed_current_target_index=[]
         for i in reversed(current_target_index):
             reversed_current_target_index.append(i)
         index_tuple = tuple(reversed_current_target_index[0:len(current_target_index) - self.setter_level_number])
-        self.y_coordinates[current_target_index[self.setter_level_number]] = self.data[self.setter_level_number][self.getter_number][index_tuple]
-        
-        # Remove existing data line if it exists
-        if hasattr(self, 'line') and self.line is not None:
-            try:
-                self.plot.removeItem(self.line)
-            except (ValueError, RuntimeError):
-                # Item might already be removed or invalid
-                pass
-        
-        # Check if v_line exists and is valid
-        v_line_exists = hasattr(self, 'v_line') and self.v_line is not None
-        
-        if v_line_exists:
-            try:
-                # Test if v_line is still valid by accessing its position
-                _ = self.v_line.pos()
-            except (AttributeError, RuntimeError):
-                v_line_exists = False
-            
-        if not v_line_exists:
-            # Only create v_line if it doesn't exist or is invalid
-            if hasattr(self, 'v_line') and self.v_line is not None:
-                try:
-                    self.plot.removeItem(self.v_line)
-                except (ValueError, RuntimeError):
-                    pass
-                    
-            self.v_line = pg.InfiniteLine(angle=90, movable=True)
-            self.plot.addItem(self.v_line)
-            self.v_line.sigPositionChanged.connect(self.update_label)
-        
-        # Add the updated data line
-        self.line = self.plot.plot(list(self.x_coordinates), list(self.y_coordinates), pen=pg.mkPen(color=(240, 255, 255), width=2))
+        measured_value = self.data[self.setter_level_number][self.getter_number][index_tuple]
+        point_index = current_target_index[self.setter_level_number]
+
+        # New path: array-valued getters become spectrum maps.
+        if self._plot_array_trace(measured_value, point_index):
+            return
+
+        # Original path: scalar getters remain normal line plots.
+        self._plot_scalar_line(point_index, measured_value)
 
     def load_plot(self,data,target_index):
         target_index=target_index[self.setter_level_number::]
@@ -197,19 +378,20 @@ class LinePlot(QtWidgets.QWidget):
             else:
                 break
 
-        # Remove existing data line if it exists
-        if hasattr(self, 'line') and self.line is not None:
-            try:
-                self.plot.removeItem(self.line)
-            except (ValueError, RuntimeError):
-                # Item might already be removed or invalid
-                pass
+        if self.y_coordinates.dtype == object:
+            for point_index, value in enumerate(self.y_coordinates.flat):
+                if self._coerce_array_trace(value) is not None:
+                    self._plot_array_trace(value, point_index % self.setting_info_length)
+            if self.array_trace_mode:
+                return
+
+        self._remove_scalar_line()
         
         # Add the new data line (preserve v_line)
         try:
             self.line = self.plot.plot(list(self.x_coordinates), self.y_coordinates, pen=pg.mkPen(color=(240, 255, 255), width=2))
         except Exception as e:
-            print(e)
+            self.label.setText(f"Could not load line plot: {e}")
 
 
 class CustomROI(pg.ROI):
@@ -451,7 +633,14 @@ class ImagePlot(pg.GraphicsLayoutWidget):
         index_list = reversed_current_target_index[0:len(current_target_index) - self.x_level_number]
         index_tuple = tuple(index_list)
 
-        self.data[current_x, current_y] = new_data[self.x_level_number][self.getter_number][index_tuple]
+        value = new_data[self.x_level_number][self.getter_number][index_tuple]
+        if np.asarray(value).ndim > 0:
+            value_array = np.asarray(value)
+            if value_array.ndim == 2 and value_array.shape[0] == 2:
+                value = np.nanmean(value_array[1])
+            else:
+                value = np.nanmean(value_array)
+        self.data[current_x, current_y] = value
 
         self.image.setImage(self.data)
 
@@ -467,9 +656,8 @@ class ImagePlot(pg.GraphicsLayoutWidget):
         
         self.data = np.array(temp)
 
-        # Final sanity check (optional, good for debugging)
         if self.data.ndim != 2:
-            print(f"Warning: expected 2D array but got shape {self.data.shape}")
+            self.z_label.setText(f"Expected 2D image data, got shape {self.data.shape}")
 
         # Set the image
         self.image.setImage(self.data)

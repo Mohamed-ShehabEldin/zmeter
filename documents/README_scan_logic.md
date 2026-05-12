@@ -36,6 +36,10 @@ Current behavior details:
 - If a level has no getters, the code appends `"none"` to that level getter list.
 - Data array shape for level `L` is:
   - `[num_getters_at_L, points(level_max), ..., points(level_L)]`
+- Data arrays use `dtype=object`. This keeps old scalar getters unchanged while
+  allowing a getter to return a numpy array, for example an Andor spectrum.
+- A scalar point is stored as a number. A spectrum point can be stored as a
+  `2 x N` array where row 0 is spectrum axis and row 1 is intensity.
 
 Related functions:
 - `initialize_scan_data`
@@ -68,6 +72,8 @@ Execution order at each level:
 Notes:
 - Base case is `current_level == -1`.
 - Scan starts from `max_level` (outermost level) and recurses inward.
+- Plot handling decides later whether a stored value is scalar or array-like.
+  `ScanLogic` only stores the object returned by the getter.
 
 Related functions:
 - `looping`

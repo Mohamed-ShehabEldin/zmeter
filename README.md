@@ -2,7 +2,7 @@
 
 A Python-based toolkit for precision electro-optical measurements.
 
-Last updated: May 5th, 2026
+Last updated: May 11th, 2026
 
 ---
 
@@ -18,6 +18,7 @@ Last updated: May 5th, 2026
 - Source-meter Keithley 2450
 - National Instrument Data Aquaistion Nidaq
 - Thorlabs power meter PM100x series
+- Andor camera and Shamrock spectrometer through pylablib
   
 **Upcoming updates:**
 
@@ -38,6 +39,32 @@ https://docs.google.com/spreadsheets/d/1Z7CwgLiQfW-cj0vrgtMSLtcA21VU4lwzqTvWpBX6
 - Scripting support for custom protocols
 - Automatic data saving and export (CSV, Excel)
 - Modular design for easy device or protocol extension
+- Scan getters can return either scalar values or array spectra. Array spectra
+  are stored in the scan data and plotted as spectrum maps, with wavelength or
+  pixel axis on X, scan/count/wait axis on Y, and intensity as color.
+
+---
+
+## Andor Spectrum Scans
+
+The Andor module is optional in `start_zmeter.py` and uses the newer
+`Andor/andor_hardware_new.py` pylablib backend. If the Andor dependencies or
+vendor drivers are missing, the rest of ZMeter can still start.
+
+Scan-facing Andor channels include:
+- Setters: `temperature`, `exposure_time`, `center_wavelength`
+- Getters: `temperature`, `exposure_time`, `center_wavelength`, `spectrum`,
+  `spectrum_mean`, `spectrum_sum`
+
+`get_spectrum()` returns a `2 x N` array:
+- row 0: wavelength calibration from Shamrock when available, otherwise pixel
+  index
+- row 1: measured intensity
+
+For a voltage/time/count sweep with spectra, make a line plot with the scan
+axis as the selected X channel and `andor_0_spectrum` as the selected Y channel.
+The plot automatically switches to a spectrum map instead of trying to draw a
+single scalar line.
 
 ---
 

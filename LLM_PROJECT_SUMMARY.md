@@ -148,6 +148,9 @@ Preparation (`initialize_scan_data`):
   - `level_manual_settings`
 - Computes `total_points`.
 - Initializes `current_target_indices`.
+- `level_data_arrays` use `dtype=object` so scalar getters and array getters
+  share the same scan storage. A normal scalar getter still stores a single
+  number; an Andor spectrum getter can store a full numpy array at that point.
 
 Execution (`looping(current_level)`):
 1. Pause/stop gate check.
@@ -196,6 +199,13 @@ Plot rendering:
 - `AllPlots` owns one page of plots.
 - Plots are paged by `plots_per_page`.
 - `LinePlot` and `ImagePlot` consume `self.info['data']` updates in `Scan.new_data()`.
+- Scalar getter results still render as normal line/image plots.
+- Array getter results are supported for spectroscopy-style measurements.
+  `LinePlot` automatically switches to a spectrum-map view when the selected Y
+  getter returns an array. For Andor spectra, X is wavelength/pixel, Y is
+  scan/count/wait, and color is intensity.
+- Image plots expect scalar Z values. If an array getter is selected as Z, the
+  current fallback is mean intensity so the image plot remains usable.
 
 Coordinate string formats used in plots:
 - `levelN` for level axes.
@@ -258,7 +268,11 @@ Examples:
 - `keithley24xx/`: Keithley 24xx via PyVISA.
 - `sr860/`, `sr830/`, `sr830_v2/`: lock-ins via PyVISA.
 - `montana2/`: cryostat controller via Montana libs.
-- `Andor/`: Andor camera UI/logic using `pylablib` as the preferred hardware backend.
+- `Andor/`: Andor camera and Shamrock spectrometer UI/logic using `pylablib`
+  as the preferred hardware backend. The scan-facing logic exposes scalar
+  getters plus `get_spectrum()`, which returns a `2 x N` array: row 0 is
+  wavelength calibration when available, otherwise pixel index; row 1 is
+  intensity.
 - `hp34401a/`, `k10cr1/`, `tlpm/`, `opticool/`, `demoDevice/` etc.
 
 Note:
@@ -269,6 +283,10 @@ Note:
 - `ni6423` is a separate added device, not a replacement for `ni6432`. It currently documents persistent AI/counter task design in `ai_refactor_v1.md`, `counter_refactor_v1.md`, and `cI_channel_structure.md`.
 - `sr860` includes the `opticool_SR860_bug_fix` updates: connection validation by `*IDN?`, a UI log panel, and manual monitor control through `stop_monitor()`.
 - `Andor` is optional in `start_zmeter.py`; it is guarded so missing `pylablib`/vendor drivers do not prevent UI startup.
+- Recommended Andor scan-channel filters in `start_zmeter.py` are:
+  - setters: `temperature`, `exposure_time`, `center_wavelength`
+  - getters: `temperature`, `exposure_time`, `center_wavelength`,
+    `spectrum`, `spectrum_mean`, `spectrum_sum`
 
 ## 15. Important File Map
 - `start_zmeter.py`: app entry, instrument selection, connect addresses.

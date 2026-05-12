@@ -122,6 +122,7 @@ def create_equipment():
         # "lockin_0": SR830V2(),
         # "lockin_2": SR830(),
         # "sr860_test": SR860(),
+        "andor_0": Andor(),
     }
     
     # Only add NIDAQ if available (not supported on macOS)
@@ -307,8 +308,15 @@ def create_equipment():
     # equips_set_channels["autofocus"] = ["autofocus"]
     # equips_get_channels["autofocus"] = []
     # Recommended Andor filters if you enable "andor_0" above:
-    # equips_set_channels["andor_0"] = ["temperature"]
-    # equips_get_channels["andor_0"] = ["temperature"]
+    # equips_set_channels["andor_0"] = ["temperature", "exposure_time", "center_wavelength"]
+    # equips_get_channels["andor_0"] = [
+    #     "temperature",
+    #     "exposure_time",
+    #     "center_wavelength",
+    #     "spectrum",
+    #     "spectrum_mean",
+    #     "spectrum_sum",
+    # ]
     equips_set_channels["Keithley_0"] = ["voltage", "current"]
     equips_get_channels["Keithley_0"] = ["voltage", "current"]
     equips_set_channels["Keithley_1"] = ["voltage", "current"]
